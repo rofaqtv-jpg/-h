@@ -22,9 +22,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-      - run: npm init -y && npm install --save-dev eslint @babel/eslint-parser
-      - run: npx eslint js/**/*.js --ext .js || true
+      - run: npm init -y && npm install --save-dev eslint @babel/eslint-parser || true
+      - run: npx eslint . --ext .js --ignore-pattern "node_modules/" --ignore-pattern "native/" || true
         continue-on-error: true
 
   build-web:
@@ -36,12 +35,29 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: mkdir -p ${{ env.BUILD_DIR }}
-      - name: Copy game files
+      - name: Build ALL files
         run: |
-          if [ -f "index.html" ]; then cp -r index.html css js ${{ env.BUILD_DIR }}/ 2>/dev/null || cp index.html ${{ env.BUILD_DIR }}/
-          fi
+          mkdir -p ${{ env.BUILD_DIR }}
+          echo "=== ROOT FILES ==="
+          ls -la
+          
+          # انسخ كل شيء مهم للعبة
+          cp index.html ${{ env.BUILD_DIR }}/ 2>/dev/null || echo "no index.html in root"
+          
+          for dir in css js scripts src assets images img models textures sounds audio libs vendor; do
+            if [ -d "$dir" ]; then
+              echo "Copying $dir"
+              cp -r "$dir" ${{ env.BUILD_DIR }}/
+            fi
+          done
+          
+          # انسخ كل ملفات html, js, css, json, wasm, glb, gltf, png, jpg, mp3, ogg
+          find . -maxdepth 2 -type f \( -name "*.html" -o -name "*.js" -o -name "*.css" -o -name "*.json" \) ! -path "./node_modules/*" ! -path "./native/*" ! -path "./dist/*" ! -path "./.git/*" -exec cp {} ${{ env.BUILD_DIR }}/ \; 2>/dev/null || true
+          
+          echo "=== BUILD DIR ==="
           ls -la ${{ env.BUILD_DIR }}/
+          find ${{ env.BUILD_DIR }} -type f | head -50
+
       - name: Create ZIP
         run: |
           cd ${{ env.BUILD_DIR }}
@@ -90,7 +106,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.5
-      - name: Fix Android project
+      - name: Fix Android project - READ ALL FILES
         run: |
           mkdir -p native/android/app/src/main/java/com/turrini/drivingsim
           mkdir -p native/android/app/src/main/assets
@@ -143,7 +159,7 @@ jobs:
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET" />
               <application android:allowBackup="true" android:label="Driving Simulator" android:theme="@style/Theme.DrivingSimulator" android:usesCleartextTraffic="true">
-                  <activity android:name=".MainActivity" android:exported="true">
+                  <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|keyboardHidden|screenSize">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
                           <category android:name="android.intent.category.LAUNCHER" />
@@ -158,25 +174,71 @@ jobs:
           import android.os.Bundle;
           import android.webkit.WebView;
           import android.webkit.WebViewClient;
+          import android.webkit.WebSettings;
+          import android.webkit.WebChromeClient;
           import androidx.appcompat.app.AppCompatActivity;
           public class MainActivity extends AppCompatActivity {
               private WebView webView;
               @Override protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
                   webView = new WebView(this);
-                  webView.getSettings().setJavaScriptEnabled(true);
-                  webView.getSettings().setDomStorageEnabled(true);
+                  WebSettings s = webView.getSettings();
+                  s.setJavaScriptEnabled(true);
+                  s.setDomStorageEnabled(true);
+                  s.setDatabaseEnabled(true);
+                  s.setAllowFileAccess(true);
+                  s.setAllowFileAccessFromFileURLs(true);
+                  s.setAllowUniversalAccessFromFileURLs(true);
+                  s.setAllowContentAccess(true);
+                  s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
+                  s.setJavaScriptCanOpenWindowsAutomatically(true);
+                  
                   webView.setWebViewClient(new WebViewClient());
+                  webView.setWebChromeClient(new WebChromeClient());
+                  
                   webView.loadUrl("file:///android_asset/index.html");
                   setContentView(webView);
               }
+              @Override public void onBackPressed() {
+                  if (webView.canGoBack()) webView.goBack();
+                  else super.onBackPressed();
+              }
           }
           EOF
-      - name: Copy web assets
+          
+      - name: Copy ALL web assets to APK
         run: |
+          rm -rf native/android/app/src/main/assets/*
           mkdir -p native/android/app/src/main/assets
-          if [ -d "web-build/dist" ]; then cp -r web-build/dist/* native/android/app/src/main/assets/; else cp -r web-build/* native/android/app/src/main/assets/ || true; fi
+          
+          echo "=== web-build structure ==="
+          ls -R web-build | head -100
+          
+          # الحالة 1: web-build/dist موجود
+          if [ -d "web-build/dist" ] && [ "$(ls -A web-build/dist)" ]; then
+            echo "Copying from web-build/dist"
+            cp -r web-build/dist/* native/android/app/src/main/assets/
+          # الحالة 2: web-build مباشرة فيها الملفات
+          else
+            echo "Copying from web-build"
+            cp -r web-build/* native/android/app/src/main/assets/ 2>/dev/null || true
+          fi
+          
+          # نسخ إضافي من الجذر باش نتأكد
+          for f in index.html; do [ -f "$f" ] && cp "$f" native/android/app/src/main/assets/ || true; done
+          for d in css js src assets images img models textures libs; do [ -d "$d" ] && cp -r "$d" native/android/app/src/main/assets/ || true; done
+          
           rm -f native/android/app/src/main/assets/*.zip || true
+          
+          echo "=== FINAL ASSETS ==="
+          ls -la native/android/app/src/main/assets/
+          find native/android/app/src/main/assets -type f | head -50
+          
+          if [ ! -f "native/android/app/src/main/assets/index.html" ]; then
+            echo "FATAL: index.html missing!"
+            exit 1
+          fi
+
       - name: Build APK
         run: |
           cd native/android
