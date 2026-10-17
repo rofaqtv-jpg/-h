@@ -1,85 +1,40 @@
-console.log('GameEngine loading...');
-
+/* Qimmat Al-Suoud - lightweight Babylon.js off-road prototype */
+(function(){
+'use strict';
 class GameEngine {
-  constructor(){
-    this.engine = null;
-    this.scene = null;
-    this.canvas = document.getElementById('gameCanvas');
-  }
-
-  async init(){
-    try{
-      console.log('Init Babylon...');
-      this.engine = new BABYLON.Engine(this.canvas, true, { preserveDrawingBuffer: true, stencil: true });
-      this.scene = new BABYLON.Scene(this.engine);
-      this.scene.clearColor = new BABYLON.Color4(0.53, 0.81, 0.98, 1); // سماء زرقاء
-
-      // Camera - بعيدة شوية باش تبان الطوموبيل
-      var camera = new BABYLON.FreeCamera('cam', new BABYLON.Vector3(0,3,-8), this.scene);
-      camera.setTarget(new BABYLON.Vector3(0,1,0));
-      camera.attachControl(this.canvas, true);
-
-      // 2 Lights باش ما يبقاش كحل
-      var light1 = new BABYLON.HemisphericLight('hLight', new BABYLON.Vector3(0,1,0), this.scene);
-      light1.intensity = 1.2;
-      var light2 = new BABYLON.DirectionalLight('dLight', new BABYLON.Vector3(-1,-2,-1), this.scene);
-      light2.intensity = 0.8;
-
-      // Ground أخضر
-      var ground = BABYLON.MeshBuilder.CreateGround('ground', {width:200, height:200}, this.scene);
-      var groundMat = new BABYLON.StandardMaterial('gMat', this.scene);
-      groundMat.diffuseColor = new BABYLON.Color3(0.3,0.6,0.3);
-      ground.material = groundMat;
-
-      // Car - لون أصفر باش يبان
-      var car = BABYLON.MeshBuilder.CreateBox('car', {width:2, height:1, depth:4}, this.scene);
-      car.position.y = 0.8;
-      car.position.z = 0;
-      var carMat = new BABYLON.StandardMaterial('cMat', this.scene);
-      carMat.diffuseColor = new BABYLON.Color3(1,0.8,0);
-      carMat.emissiveColor = new BABYLON.Color3(0.2,0.1,0); // باش يضوي شوية
-      car.material = carMat;
-
-      // Box يدور باش تعرف أن المحرك خدام
-      this.scene.registerBeforeRender(()=>{
-        car.rotation.y += 0.01;
-      });
-
-      this.engine.runRenderLoop(() => this.scene.render());
-      window.addEventListener('resize', () => this.engine.resize());
-
-      console.log('GameEngine INIT OK');
-      // خبي canvas فاللول
-      this.canvas.style.display = 'none';
-      return true;
-    }catch(e){
-      console.log('GameEngine ERROR: '+e.message);
-      return false;
-    }
-  }
-
-  start(){
-    console.log('GameEngine START - Show 3D');
-    this.canvas.style.display = 'block';
-    this.canvas.style.pointerEvents = 'auto';
-    this.canvas.style.zIndex = '5';
-    document.querySelectorAll('.menu-screen').forEach(s=>s.classList.remove('active'));
-    document.getElementById('ui-overlay').style.display = 'none';
-    if(this.engine) this.engine.resize();
-  }
-
-  stop(){
-    console.log('GameEngine STOP - Hide 3D');
-    this.canvas.style.display = 'none';
-    document.getElementById('ui-overlay').style.display = 'block';
-    document.getElementById('main-menu').classList.add('active');
-  }
+ constructor(){this.canvas=document.getElementById('gameCanvas');this.engine=null;this.scene=null;this.car=null;this.wheels=[];this.speed=0;this.steer=0;this.throttle=0;this.brake=0;this.paused=false;this.started=false;this.cameraMode='chase';this.distance=0;this.lastTime=performance.now();}
+ async init(){
+  if(!window.BABYLON){console.error('Babylon.js did not load');return false;}
+  const B=BABYLON;this.engine=new B.Engine(this.canvas,true,{preserveDrawingBuffer:false,stencil:true,adaptToDeviceRatio:true});this.engine.setHardwareScalingLevel(Math.min(1.5,1/(window.devicePixelRatio||1)));
+  this.scene=new B.Scene(this.engine);this.scene.clearColor=new B.Color4(.56,.72,.78,1);this.scene.fogMode=B.Scene.FOGMODE_EXP2;this.scene.fogDensity=.0035;this.scene.fogColor=new B.Color3(.56,.72,.78);
+  const camera=new B.FollowCamera('chase-camera',new B.Vector3(0,5,-10),this.scene);camera.radius=11;camera.heightOffset=4;camera.rotationOffset=180;camera.cameraAcceleration=.05;camera.maxCameraSpeed=8;camera.lowerRadiusLimit=6;camera.upperRadiusLimit=18;this.camera=camera;this.scene.activeCamera=camera;
+  const hemi=new B.HemisphericLight('sky-light',new B.Vector3(0,1,0),this.scene);hemi.intensity=.95;const sun=new B.DirectionalLight('sun',new B.Vector3(-.5,-1,.35),this.scene);sun.position=new B.Vector3(40,80,-20);sun.intensity=1.2;
+  this.makeMaterial('ground',new B.Color3(.24,.31,.23));this.makeMaterial('road',new B.Color3(.24,.22,.19));this.makeMaterial('rock',new B.Color3(.31,.32,.31));this.makeMaterial('carpaint',new B.Color3(.78,.045,.035));this.makeMaterial('glass',new B.Color3(.055,.12,.15));this.makeMaterial('rubber',new B.Color3(.035,.04,.04));this.makeMaterial('rim',new B.Color3(.55,.58,.58));this.makeMaterial('pine',new B.Color3(.12,.22,.16));
+  this.buildTerrain();this.buildCar();this.bindControls();this.engine.runRenderLoop(()=>{if(this.scene){this.update();this.scene.render();}});window.addEventListener('resize',()=>this.engine.resize());return true;
+ }
+ makeMaterial(name,color){const m=new BABYLON.StandardMaterial(name,this.scene);m.diffuseColor=color;m.specularColor=new BABYLON.Color3(.2,.2,.2);return m;}
+ buildTerrain(){const B=BABYLON;const ground=B.MeshBuilder.CreateGround('valley-floor',{width:500,height:500,subdivisions:30},this.scene);ground.material=this.scene.getMaterialByName('ground');
+  // Rocky mountain silhouettes and scattered boulders provide depth while keeping mobile rendering light.
+  for(let i=0;i<30;i++){let a=i*Math.PI*2/30,r=75+(i%4)*14,h=18+(i%7)*7;let m=B.MeshBuilder.CreateCylinder('mountain-'+i,{diameterTop:2+ i%3,diameterBottom:28+(i%5)*8,height:h,tessellation:5},this.scene);m.position.set(Math.cos(a)*r,h/2-3,Math.sin(a)*r+35);m.rotation.y=a;m.material=this.scene.getMaterialByName('rock');}
+  // Winding dirt trail made from linked road slabs.
+  this.roadSegments=[];for(let i=0;i<70;i++){let z=i*5-20,x=Math.sin(i*.105)*13;let slab=B.MeshBuilder.CreateBox('trail-'+i,{width:8.5,height:.18,depth:5.5},this.scene);slab.position.set(x,.05,z);slab.rotation.y=Math.cos(i*.105)*.11;slab.material=this.scene.getMaterialByName('road');this.roadSegments.push(slab);}
+  for(let i=0;i<110;i++){let z=(i*13)%400-60,x=Math.sin(i*12.989)*55; if(Math.abs(x-Math.sin(z*.021)*13)<8)continue;let rock=B.MeshBuilder.CreatePolyhedron('boulder-'+i,{type:1,size:1.3+(i%5)*.55},this.scene);rock.position.set(x,.45+(i%3)*.2,z);rock.scaling.y=.6+(i%4)*.25;rock.rotation.set(i*.7,i*.3,i*.2);rock.material=this.scene.getMaterialByName('rock');if(i%3===0){let trunk=B.MeshBuilder.CreateCylinder('tree-trunk-'+i,{height:3,diameter:.35,tessellation:5},this.scene);trunk.position.set(x,1.5,z+2);trunk.material=this.scene.getMaterialByName('rock');let crown=B.MeshBuilder.CreateCylinder('tree-crown-'+i,{height:4,diameterTop:0,diameterBottom:2.7,tessellation:5},this.scene);crown.position.set(x,4,z+2);crown.material=this.scene.getMaterialByName('pine');}}
+  const sunDisc=B.MeshBuilder.CreateSphere('sun-glow',{diameter:8,segments:8},this.scene);sunDisc.position.set(-55,60,150);const sm=new B.StandardMaterial('sunmat',this.scene);sm.emissiveColor=new B.Color3(1,.72,.42);sm.disableLighting=true;sunDisc.material=sm;
+ }
+ buildCar(){const B=BABYLON;this.car=new B.TransformNode('player-4x4',this.scene);this.car.position.set(0,.85,0);const body=B.MeshBuilder.CreateBox('vehicle-body',{width:2.15,height:.72,depth:3.8},this.scene);body.parent=this.car;body.position.y=.35;body.material=this.scene.getMaterialByName('carpaint');const cabin=B.MeshBuilder.CreateBox('vehicle-cabin',{width:1.65,height:.72,depth:1.65},this.scene);cabin.parent=this.car;cabin.position.set(0,.98,-.15);cabin.material=this.scene.getMaterialByName('glass');const hood=B.MeshBuilder.CreateBox('bonnet',{width:1.9,height:.18,depth:1.05},this.scene);hood.parent=this.car;hood.position.set(0,.72,1.18);hood.material=this.scene.getMaterialByName('carpaint');
+  for(const x of [-1.08,1.08])for(const z of [-1.25,1.25]){const wheel=B.MeshBuilder.CreateCylinder('wheel',{diameter:.82,height:.32,tessellation:12},this.scene);wheel.parent=this.car;wheel.position.set(x,.05,z);wheel.rotation.z=Math.PI/2;wheel.material=this.scene.getMaterialByName('rubber');const rim=B.MeshBuilder.CreateCylinder('rim',{diameter:.4,height:.34,tessellation:10},this.scene);rim.parent=wheel;rim.rotation.z=Math.PI/2;rim.material=this.scene.getMaterialByName('rim');this.wheels.push(wheel);}
+  for(const x of [-.72,.72]){const lamp=B.MeshBuilder.CreateBox('headlamp',{width:.28,height:.16,depth:.08},this.scene);lamp.parent=this.car;lamp.position.set(x,.42,1.94);const lm=new B.StandardMaterial('lampmat'+x,this.scene);lm.emissiveColor=new B.Color3(1,.82,.55);lamp.material=lm;}
+  this.camera.lockedTarget=this.car;this.carMeshes=[body,cabin,hood];
+ }
+ bindControls(){const bind=(id,down,up)=>{const el=document.getElementById(id);if(!el)return;const start=e=>{e.preventDefault();down();};const end=e=>{e.preventDefault();up();};el.addEventListener('pointerdown',start);['pointerup','pointercancel','pointerleave'].forEach(ev=>el.addEventListener(ev,end));};bind('btn-gas',()=>this.throttle=1,()=>this.throttle=0);bind('btn-brake',()=>this.brake=1,()=>this.brake=0);bind('btn-left',()=>this.steer=-1,()=>{if(this.steer<0)this.steer=0;});bind('btn-right',()=>this.steer=1,()=>{if(this.steer>0)this.steer=0;});window.addEventListener('keydown',e=>{if(['ArrowUp','w','W'].includes(e.key))this.throttle=1;if(['ArrowDown','s','S'].includes(e.key))this.brake=1;if(['ArrowLeft','a','A'].includes(e.key))this.steer=-1;if(['ArrowRight','d','D'].includes(e.key))this.steer=1;if(e.key==='c'||e.key==='C')this.changeCamera();if(e.key==='Escape'||e.key==='p'||e.key==='P')this.togglePause();});window.addEventListener('keyup',e=>{if(['ArrowUp','w','W'].includes(e.key))this.throttle=0;if(['ArrowDown','s','S'].includes(e.key))this.brake=0;if(['ArrowLeft','a','A','ArrowRight','d','D'].includes(e.key))this.steer=0;});}
+ update(){if(!this.car)return;const dt=Math.min(.05,this.engine.getDeltaTime()/1000);if(this.started&&!this.paused){if(this.throttle)this.speed=Math.min(105,this.speed+28*dt);else this.speed=Math.max(0,this.speed-5*dt);if(this.brake)this.speed=Math.max(0,this.speed-52*dt);const move=this.speed/3.6*dt;this.car.rotation.y+=this.steer*move*.045;this.car.position.x+=Math.sin(this.car.rotation.y)*move;this.car.position.z+=Math.cos(this.car.rotation.y)*move;this.car.rotation.z=-this.steer*Math.min(.12,this.speed/500);this.car.position.y=.85+Math.sin(this.car.position.z*.15)*.13;this.wheels.forEach(w=>w.rotation.x+=move*1.8);if(this.car.position.z>250){this.car.position.z=-20;this.distance+=270;this.roadSegments.forEach((s,i)=>{let z=this.car.position.z+i*5-20;s.position.z=z;s.position.x=Math.sin((z+20)*.021)*13;});}document.getElementById('speed').textContent=Math.round(this.speed);document.getElementById('altitude').innerHTML=(1240+Math.max(0,Math.floor(this.car.position.z*1.7))).toLocaleString()+' <small>M</small>';}}
+ start(){this.started=true;this.paused=false;document.querySelectorAll('.menu-screen').forEach(s=>s.classList.remove('active'));document.getElementById('ui-overlay').style.background='transparent';document.getElementById('game-hud').classList.remove('hidden');document.getElementById('pause-panel').classList.add('hidden');this.canvas.style.display='block';this.engine.resize();this.toast('EXPEDITION STARTED');}
+ stop(){this.started=false;this.paused=false;this.speed=0;document.getElementById('game-hud').classList.add('hidden');document.getElementById('pause-panel').classList.add('hidden');document.getElementById('ui-overlay').style.background='';document.getElementById('main-menu').classList.add('active');}
+ togglePause(){if(!this.started)return;this.paused=!this.paused;document.getElementById('pause-panel').classList.toggle('hidden',!this.paused);}
+ changeCamera(){if(!this.camera)return;this.cameraMode=this.cameraMode==='chase'?'wide':this.cameraMode==='wide'?'cockpit':'chase';if(this.cameraMode==='chase'){this.camera.radius=11;this.camera.heightOffset=4;}else if(this.cameraMode==='wide'){this.camera.radius=17;this.camera.heightOffset=7;}else{this.camera.radius=2.2;this.camera.heightOffset=1.5;}this.toast(this.cameraMode.toUpperCase()+' CAMERA');}
+ toast(msg){const el=document.getElementById('hud-toast');if(el){el.textContent=msg;el.style.opacity='1';clearTimeout(this.toastTimer);this.toastTimer=setTimeout(()=>el.style.opacity='0',2200);}}
+ async importModel(file){if(!file||!window.BABYLON.SceneLoader)return;const url=URL.createObjectURL(file);try{const result=await BABYLON.SceneLoader.ImportMeshAsync(null,'',url,this.scene,undefined,'.'+file.name.split('.').pop());if(result.meshes.length){const root=new BABYLON.TransformNode('imported-mod',this.scene);result.meshes.forEach(m=>{if(m!==this.scene.meshes[0]&&m.parent===null)m.parent=root;});root.position=this.car.position.clone();root.scaling.setAll(.7);this.toast('CUSTOM MODEL IMPORTED');document.getElementById('mod-status').textContent='Loaded: '+file.name;}}catch(err){document.getElementById('mod-status').textContent='Could not load model: '+err.message;}finally{URL.revokeObjectURL(url);}}
 }
-
-window.GameEngine = GameEngine;
-window.gameEngineInstance = new GameEngine();
-window.gameEngineInstance.init().then(ok=>{
-  window.gameEngine = window.gameEngineInstance;
-  window.startFreeDrive = function(){ window.gameEngineInstance.start(); };
-  console.log('Engine ready');
-});
+window.gameEngineInstance=new GameEngine();window.GameEngine=window.gameEngineInstance;
+window.addEventListener('DOMContentLoaded',async()=>{try{const ok=await window.GameEngine.init();if(!ok)throw new Error('3D engine unavailable');document.getElementById('loading-text').textContent='Ready for the climb';}catch(e){console.error(e);const status=document.getElementById('loading-text');if(status)status.textContent='3D engine could not load. Check your internet connection and reload.';}});
+})();
