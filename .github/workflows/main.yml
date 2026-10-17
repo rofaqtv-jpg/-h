@@ -50,7 +50,7 @@ jobs:
       - name: Copy game files
         run: |
           if [ -f "index.html" ]; then cp -r index.html css js ${{ env.BUILD_DIR }}/ 2>/dev/null || cp index.html ${{ env.BUILD_DIR }}/
-          else echo "No index.html found"; ls -la; fi
+          else find . -name "index.html" -exec cp {} ${{ env.BUILD_DIR }}/ \; ; fi
           ls -la ${{ env.BUILD_DIR }}/
       - name: Download Babylon.js dependencies
         run: |
@@ -92,7 +92,6 @@ jobs:
           if [ -f "native/wasm/physics_bridge.cpp" ]; then
             emcc native/wasm/physics_bridge.cpp -O3 -s WASM=1 -s EXPORTED_FUNCTIONS='["_vec3_add","_vec3_sub","_vec3_scale","_vec3_length","_vec3_normalize","_quat_multiply","_quat_from_axis_angle","_quat_rotate","_calculate_suspension","_calculate_tire_force"]' -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]' -o wasm-build/physics_bridge.js
           else
-            echo "C++ file not found, skipping WASM build."
             echo "// placeholder" > wasm-build/physics_bridge.js
           fi
       - name: Upload WASM artifact
@@ -125,24 +124,26 @@ jobs:
         run: |
           mkdir -p native/android/gradle/wrapper
           mkdir -p native/android/app/src/main/java/com/turrini/drivingsim
-          mkdir -p native/android/app/src/main/res/layout
-          mkdir -p native/android/app/src/main/res/values
           mkdir -p native/android/app/src/main/assets
           
-          if [ ! -f "native/android/gradle/wrapper/gradle-wrapper.jar" ]; then
-            curl -L "https://github.com/gradle/gradle/raw/v8.5.0/gradle/wrapper/gradle-wrapper.jar" -o native/android/gradle/wrapper/gradle-wrapper.jar || curl -L "https://services.gradle.org/distributions/gradle-8.5-bin.zip" -o /tmp/gradle.zip && unzip -p /tmp/gradle.zip gradle-8.5/lib/gradle-wrapper-8.5.jar > native/android/gradle/wrapper/gradle-wrapper.jar || true
-          fi
-          if [ ! -f "native/android/gradle/wrapper/gradle-wrapper.properties" ]; then
-            echo "distributionBase=GRADLE_USER_HOME" > native/android/gradle/wrapper/gradle-wrapper.properties
-            echo "distributionPath=wrapper/dists" >> native/android/gradle/wrapper/gradle-wrapper.properties
-            echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip" >> native/android/gradle/wrapper/gradle-wrapper.properties
-            echo "zipStoreBase=GRADLE_USER_HOME" >> native/android/gradle/wrapper/gradle-wrapper.properties
-            echo "zipStorePath=wrapper/dists" >> native/android/gradle/wrapper/gradle-wrapper.properties
-          fi
-          if [ ! -f "native/android/gradlew" ]; then
-            printf '#!/bin/sh\nAPP_HOME=$( cd "${0%%/*}" > /dev/null && pwd -P ) || exit\nCLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar\nexec java -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"\n' > native/android/gradlew
-            chmod +x native/android/gradlew
-          fi
+          # === FIX WRAPPER - الطريقة الصحيحة ===
+          echo "📥 Downloading Gradle 8.5..."
+          rm -rf /tmp/dl
+          mkdir -p /tmp/dl
+          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/dl/gradle.zip
+          unzip -q /tmp/dl/gradle.zip -d /tmp/dl/
+          cp /tmp/dl/gradle-8.5/lib/gradle-wrapper-8.5.jar native/android/gradle/wrapper/gradle-wrapper.jar
+          echo "✅ Wrapper JAR extracted"
+          
+          echo "distributionBase=GRADLE_USER_HOME" > native/android/gradle/wrapper/gradle-wrapper.properties
+          echo "distributionPath=wrapper/dists" >> native/android/gradle/wrapper/gradle-wrapper.properties
+          echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip" >> native/android/gradle/wrapper/gradle-wrapper.properties
+          echo "zipStoreBase=GRADLE_USER_HOME" >> native/android/gradle/wrapper/gradle-wrapper.properties
+          echo "zipStorePath=wrapper/dists" >> native/android/gradle/wrapper/gradle-wrapper.properties
+          
+          printf '#!/bin/sh\nAPP_HOME=$( cd "${0%%/*}" > /dev/null && pwd -P ) || exit\nCLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar\nexec java -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"\n' > native/android/gradlew
+          chmod +x native/android/gradlew
+          
           if [ ! -f "native/android/build.gradle" ]; then
             echo "buildscript { repositories { google(); mavenCentral() } dependencies { classpath 'com.android.tools.build:gradle:8.2.0' } } allprojects { repositories { google(); mavenCentral() } }" > native/android/build.gradle
           fi
@@ -156,17 +157,15 @@ jobs:
             echo '<?xml version="1.0" encoding="utf-8"?><manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET" /><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /><application android:allowBackup="true" android:label="Driving Simulator" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:usesCleartextTraffic="true"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity></application></manifest>' > native/android/app/src/main/AndroidManifest.xml
           fi
           if [ ! -f "native/android/app/src/main/java/com/turrini/drivingsim/MainActivity.java" ]; then
-            echo "package com.turrini.drivingsim; import android.os.Bundle; import android.webkit.WebView; import android.webkit.WebViewClient; import androidx.appcompat.app.AppCompatActivity; public class MainActivity extends AppCompatActivity { private WebView webView; @Override protected void onCreate(Bundle savedInstanceState) { super.onCreate(savedInstanceState); webView = new WebView(this); webView.getSettings().setJavaScriptEnabled(true); webView.getSettings().setDomStorageEnabled(true); webView.setWebViewClient(new WebViewClient()); webView.loadUrl(\"file:///android_asset/index.html\"); setContentView(webView); } @Override public void onBackPressed() { if (webView.canGoBack()) { webView.goBack(); } else { super.onBackPressed(); } } }" > native/android/app/src/main/java/com/turrini/drivingsim/MainActivity.java
+            echo "package com.turrini.drivingsim; import android.os.Bundle; import android.webkit.WebView; import android.webkit.WebViewClient; import androidx.appcompat.app.AppCompatActivity; public class MainActivity extends AppCompatActivity { private WebView webView; @Override protected void onCreate(Bundle savedInstanceState) { super.onCreate(savedInstanceState); webView = new WebView(this); webView.getSettings().setJavaScriptEnabled(true); webView.getSettings().setDomStorageEnabled(true); webView.setWebViewClient(new WebViewClient()); webView.loadUrl(\"file:///android_asset/index.html\"); setContentView(webView); } @Override public void onBackPressed() { if (webView.canGoBack()) webView.goBack(); else super.onBackPressed(); } }" > native/android/app/src/main/java/com/turrini/drivingsim/MainActivity.java
           fi
-          echo "✅ Android structure verified"
+          echo "✅ Android project fixed"
       - name: Copy web assets to Android
         run: |
           mkdir -p native/android/app/src/main/assets
-          if [ -d "web-build/dist" ]; then cp -r web-build/dist/* native/android/app/src/main/assets/
-          else cp -r web-build/* native/android/app/src/main/assets/ || true; fi
+          if [ -d "web-build/dist" ]; then cp -r web-build/dist/* native/android/app/src/main/assets/; else cp -r web-build/* native/android/app/src/main/assets/ || true; fi
           rm -f native/android/app/src/main/assets/*.zip || true
-      - name: Make gradlew executable
-        run: chmod +x native/android/gradlew
+          ls -la native/android/app/src/main/assets/ | head -20
       - name: Cache Gradle packages
         uses: actions/cache@v4
         with:
@@ -185,7 +184,7 @@ jobs:
       - name: Verify APK files
         run: |
           find native/android -name "*.apk" -type f
-          ls -lh native/android/app/build/outputs/apk/debug/ || exit 1
+          ls -lh native/android/app/build/outputs/apk/debug/
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
@@ -210,10 +209,6 @@ jobs:
         with:
           name: web-build
           path: deploy
-      - name: List files
-        run: |
-          ls -la deploy/
-          ls -la deploy/dist/ || ls -la deploy/
       - name: Setup Pages
         uses: actions/configure-pages@v4
       - name: Upload to GitHub Pages
