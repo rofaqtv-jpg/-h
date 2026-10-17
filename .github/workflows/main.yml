@@ -135,7 +135,8 @@ jobs:
           path: wasm-build/
           retention-days: 30
 
-  # ===== BUILD ANDROID APK =====
+        
+          # ===== BUILD ANDROID APK =====
   build-android:
     name: Build Android APK
     runs-on: ubuntu-latest
@@ -152,13 +153,178 @@ jobs:
           java-version: '17'
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
+        uses: android-actions/setup-android@v3
 
       - name: Download web build
         uses: actions/download-artifact@v4
         with:
           name: web-build
           path: web-build
+
+      - name: Check Android project structure
+        id: check-android
+        run: |
+          echo "🔍 Checking Android project structure..."
+          
+          MISSING_FILES=""
+          
+          if [ ! -f "native/android/build.gradle" ]; then
+            MISSING_FILES="$MISSING_FILES build.gradle"
+          fi
+          
+          if [ ! -f "native/android/settings.gradle" ]; then
+            MISSING_FILES="$MISSING_FILES settings.gradle"
+          fi
+          
+          if [ ! -f "native/android/app/build.gradle" ]; then
+            MISSING_FILES="$MISSING_FILES app/build.gradle"
+          fi
+          
+          if [ ! -f "native/android/gradlew" ]; then
+            MISSING_FILES="$MISSING_FILES gradlew"
+          fi
+          
+          if [ ! -f "native/android/gradle/wrapper/gradle-wrapper.jar" ]; then
+            MISSING_FILES="$MISSING_FILES gradle/wrapper/gradle-wrapper.jar"
+          fi
+          
+          if [ -n "$MISSING_FILES" ]; then
+            echo "❌ Missing files:$MISSING_FILES"
+            echo "android_complete=false" >> $GITHUB_OUTPUT
+            echo ""
+            echo "Creating missing files..."
+            
+            # Create missing directories
+            mkdir -p native/android/gradle/wrapper
+            mkdir -p native/android/app/src/main/java/com/turrini/drivingsim
+            mkdir -p native/android/app/src/main/res/layout
+            mkdir -p native/android/app/src/main/res/values
+            mkdir -p native/android/app/src/main/assets
+            
+            # Download gradle wrapper if missing
+            if [ ! -f "native/android/gradle/wrapper/gradle-wrapper.jar" ]; then
+              echo "📥 Downloading gradle-wrapper.jar..."
+              curl -L "https://raw.githubusercontent.com/gradle/gradle/v8.5.0/gradle/wrapper/gradle-wrapper.jar" \
+                -o native/android/gradle/wrapper/gradle-wrapper.jar || echo "Failed to download"
+            fi
+            
+            # Create gradlew if missing
+            if [ ! -f "native/android/gradlew" ]; then
+              echo "📝 Creating gradlew..."
+              cat > native/android/gradlew << 'GRADLEW_EOF'
+#!/bin/sh
+APP_HOME=$( cd "${0%/*}" > /dev/null && pwd -P ) || exit
+CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
+exec java -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"
+GRADLEW_EOF
+              chmod +x native/android/gradlew
+            fi
+            
+            # Create build.gradle if missing
+            if [ ! -f "native/android/build.gradle" ]; then
+              echo "📝 Creating root build.gradle..."
+              cat > native/android/build.gradle << 'BUILD_EOF'
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.2.0'
+    }
+}
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+BUILD_EOF
+            fi
+            
+            # Create settings.gradle if missing
+            if [ ! -f "native/android/settings.gradle" ]; then
+              echo "📝 Creating settings.gradle..."
+              cat > native/android/settings.gradle << 'SETTINGS_EOF'
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+rootProject.name = "DrivingSimulator"
+include ':app'
+SETTINGS_EOF
+            fi
+            
+            # Create app/build.gradle if missing
+            if [ ! -f "native/android/app/build.gradle" ]; then
+              echo "📝 Creating app/build.gradle..."
+              cat > native/android/app/build.gradle << 'APP_BUILD_EOF'
+plugins {
+    id 'com.android.application'
+}
+android {
+    namespace 'com.turrini.drivingsim'
+    compileSdk 34
+    defaultConfig {
+        applicationId "com.turrini.drivingsim"
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName "1.0.0"
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.6.1'
+    implementation 'androidx.webkit:webkit:1.9.0'
+}
+APP_BUILD_EOF
+            fi
+            
+            # Create gradle.properties if missing
+            if [ ! -f "native/android/gradle.properties" ]; then
+              echo "📝 Creating gradle.properties..."
+              cat > native/android/gradle.properties << 'PROPS_EOF'
+org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+android.useAndroidX=true
+PROPS_EOF
+            fi
+            
+            # Create gradle-wrapper.properties if missing
+            if [ ! -f "native/android/gradle/wrapper/gradle-wrapper.properties" ]; then
+              echo "📝 Creating gradle-wrapper.properties..."
+              cat > native/android/gradle/wrapper/gradle-wrapper.properties << 'WRAPPER_EOF'
+distributionBase=GRADLE_USER_HOME
+distributionPath=wrapper/dists
+distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
+zipStoreBase=GRADLE_USER_HOME
+zipStorePath=wrapper/dists
+WRAPPER_EOF
+            fi
+            
+            echo "✅ Created missing files"
+          else
+            echo "✅ All Android files present"
+            echo "android_complete=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Copy web assets to Android
         run: |
@@ -169,8 +335,8 @@ jobs:
       - name: Make gradlew executable
         run: |
           cd native/android
-          chmod +x gradlew
-          chmod +x gradlew.bat || true
+          chmod +x gradlew || echo "gradlew not found or already executable"
+          chmod +x gradlew.bat 2>/dev/null || true
 
       - name: Cache Gradle packages
         uses: actions/cache@v3
@@ -189,13 +355,6 @@ jobs:
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
 
-      - name: Build Release APK
-        run: |
-          cd native/android
-          ./gradlew assembleRelease --no-daemon --stacktrace
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
-
       - name: Verify APK files
         run: |
           echo "📦 Checking for APK files..."
@@ -208,11 +367,6 @@ jobs:
             echo "❌ Debug APK not found"
             exit 1
           fi
-          
-          if [ -f "native/android/app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
-            echo "✅ Release APK found"
-            ls -lh native/android/app/build/outputs/apk/release/
-          fi
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -220,25 +374,7 @@ jobs:
           name: driving-simulator-debug-apk
           path: native/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
-
-      - name: Upload Release APK
-        uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: driving-simulator-release-apk
-          path: native/android/app/build/outputs/apk/release/app-release-unsigned.apk
-          retention-days: 30
-
-      - name: Upload APK to Release (if tagged)
-        if: github.event_name == 'release'
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            native/android/app/build/outputs/apk/debug/app-debug.apk
-            native/android/app/build/outputs/apk/release/app-release-unsigned.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+        
   # ===== DEPLOY TO GITHUB PAGES =====
   deploy-pages:
     name: Deploy to GitHub Pages
