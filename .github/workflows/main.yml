@@ -94,73 +94,55 @@ jobs:
         run: |
           mkdir -p native/android/app/src/main/java/com/turrini/drivingsim
           mkdir -p native/android/app/src/main/assets
+          mkdir -p native/android/app/src/main/res/values
           
           cat > native/android/build.gradle <<'EOF'
           buildscript {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath 'com.android.tools.build:gradle:8.2.0'
-              }
+              repositories { google(); mavenCentral() }
+              dependencies { classpath 'com.android.tools.build:gradle:8.2.0' }
           }
           EOF
 
           cat > native/android/settings.gradle <<'EOF'
-          pluginManagement {
-              repositories {
-                  google()
-                  mavenCentral()
-                  gradlePluginPortal()
-              }
-          }
+          pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
-              repositories {
-                  google()
-                  mavenCentral()
-              }
+              repositories { google(); mavenCentral() }
           }
           rootProject.name = "DrivingSimulator"
           include ':app'
           EOF
 
           cat > native/android/app/build.gradle <<'EOF'
-          plugins {
-              id 'com.android.application'
-          }
+          plugins { id 'com.android.application' }
           android {
               namespace 'com.turrini.drivingsim'
               compileSdk 34
-              defaultConfig {
-                  applicationId "com.turrini.drivingsim"
-                  minSdk 24
-                  targetSdk 34
-                  versionCode 1
-                  versionName "1.0.0"
-              }
-              buildTypes {
-                  release {
-                      minifyEnabled false
-                  }
-              }
-              compileOptions {
-                  sourceCompatibility JavaVersion.VERSION_17
-                  targetCompatibility JavaVersion.VERSION_17
-              }
+              defaultConfig { applicationId "com.turrini.drivingsim"; minSdk 24; targetSdk 34; versionCode 1; versionName "1.0.0" }
+              buildTypes { release { minifyEnabled false } }
+              compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
           }
           dependencies {
               implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'com.google.android.material:material:1.11.0'
               implementation 'androidx.webkit:webkit:1.9.0'
           }
+          EOF
+
+          cat > native/android/app/src/main/res/values/themes.xml <<'EOF'
+          <resources>
+              <style name="Theme.DrivingSimulator" parent="Theme.AppCompat.Light.NoActionBar">
+                  <item name="android:windowFullscreen">true</item>
+                  <item name="android:windowNoTitle">true</item>
+              </style>
+          </resources>
           EOF
 
           cat > native/android/app/src/main/AndroidManifest.xml <<'EOF'
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET" />
-              <application android:allowBackup="true" android:label="Driving Simulator" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:usesCleartextTraffic="true">
+              <application android:allowBackup="true" android:label="Driving Simulator" android:theme="@style/Theme.DrivingSimulator" android:usesCleartextTraffic="true">
                   <activity android:name=".MainActivity" android:exported="true">
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN" />
@@ -179,8 +161,7 @@ jobs:
           import androidx.appcompat.app.AppCompatActivity;
           public class MainActivity extends AppCompatActivity {
               private WebView webView;
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
+              @Override protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
                   webView = new WebView(this);
                   webView.getSettings().setJavaScriptEnabled(true);
