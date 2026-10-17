@@ -162,23 +162,82 @@ jobs:
 
       - name: Copy web assets to Android
         run: |
-          mkdir -p ${{ env.ANDROID_DIR }}/app/src/main/assets
-          cp -r web-build/* ${{ env.ANDROID_DIR }}/app/src/main/assets/
+          mkdir -p native/android/app/src/main/assets
+          cp -r web-build/* native/android/app/src/main/assets/
+          echo "✅ Web assets copied to Android project"
 
-      - name: Build Android project
+      - name: Make gradlew executable
         run: |
-          cd ${{ env.ANDROID_DIR }}
+          cd native/android
           chmod +x gradlew
-          ./gradlew assembleRelease || echo "Android build requires full project setup"
-        continue-on-error: true
+          chmod +x gradlew.bat || true
 
-      - name: Upload Android artifact (if built)
+      - name: Cache Gradle packages
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      - name: Build Debug APK
+        run: |
+          cd native/android
+          ./gradlew assembleDebug --no-daemon --stacktrace
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
+      - name: Build Release APK
+        run: |
+          cd native/android
+          ./gradlew assembleRelease --no-daemon --stacktrace
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
+
+      - name: Verify APK files
+        run: |
+          echo "📦 Checking for APK files..."
+          find native/android -name "*.apk" -type f
+          
+          if [ -f "native/android/app/build/outputs/apk/debug/app-debug.apk" ]; then
+            echo "✅ Debug APK found"
+            ls -lh native/android/app/build/outputs/apk/debug/
+          else
+            echo "❌ Debug APK not found"
+            exit 1
+          fi
+          
+          if [ -f "native/android/app/build/outputs/apk/release/app-release-unsigned.apk" ]; then
+            echo "✅ Release APK found"
+            ls -lh native/android/app/build/outputs/apk/release/
+          fi
+
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: driving-simulator-debug-apk
+          path: native/android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+
+      - name: Upload Release APK
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: android-apk
-          path: ${{ env.ANDROID_DIR }}/app/build/outputs/apk/
+          name: driving-simulator-release-apk
+          path: native/android/app/build/outputs/apk/release/app-release-unsigned.apk
           retention-days: 30
+
+      - name: Upload APK to Release (if tagged)
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            native/android/app/build/outputs/apk/debug/app-debug.apk
+            native/android/app/build/outputs/apk/release/app-release-unsigned.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # ===== DEPLOY TO GITHUB PAGES =====
   deploy-pages:
