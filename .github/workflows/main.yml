@@ -85,36 +85,18 @@ jobs:
         uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.5
-            - name: Create Android files
+      - name: Create Android files
         run: |
           mkdir -p native/android/app/src/main/java/com/turrini/drivingsim
           mkdir -p native/android/app/src/main/assets
           mkdir -p native/android/app/src/main/res/values
           mkdir -p native/android/gradle/wrapper
-
           printf 'buildscript {\n    repositories { google(); mavenCentral() }\n    dependencies { classpath "com.android.tools.build:gradle:8.2.0" }\n}\nallprojects { repositories { google(); mavenCentral() } }\n' > native/android/build.gradle
-
           printf 'pluginManagement {\n    repositories {\n        google()\n        mavenCentral()\n        gradlePluginPortal()\n    }\n}\ndependencyResolutionManagement {\n    repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)\n    repositories {\n        google()\n        mavenCentral()\n    }\n}\nrootProject.name = "DrivingSimulator"\ninclude ":app"\n' > native/android/settings.gradle
-
           printf 'distributionBase=GRADLE_USER_HOME\ndistributionPath=wrapper/dists\ndistributionUrl=https://services.gradle.org/distributions/gradle-8.5-bin.zip\nzipStoreBase=GRADLE_USER_HOME\nzipStorePath=wrapper/dists\n' > native/android/gradle/wrapper/gradle-wrapper.properties
-
           printf 'plugins { id "com.android.application" }\nandroid {\n    namespace "com.turrini.drivingsim"\n    compileSdk 34\n    defaultConfig {\n        applicationId "com.turrini.drivingsim"\n        minSdk 24\n        targetSdk 34\n        versionCode 1\n        versionName "1.0.0"\n    }\n    buildTypes { release { minifyEnabled false } }\n    compileOptions {\n        sourceCompatibility JavaVersion.VERSION_17\n        targetCompatibility JavaVersion.VERSION_17\n    }\n}\ndependencies {\n    implementation "androidx.appcompat:appcompat:1.6.1"\n    implementation "com.google.android.material:material:1.11.0"\n    implementation "androidx.webkit:webkit:1.9.0"\n}\n' > native/android/app/build.gradle
-
           printf '<resources><style name="Theme.DrivingSimulator" parent="Theme.AppCompat.Light.NoActionBar"><item name="android:windowFullscreen">true</item><item name="android:windowNoTitle">true</item></style></resources>' > native/android/app/src/main/res/values/themes.xml
-
           printf '<?xml version="1.0" encoding="utf-8"?><manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><application android:allowBackup="true" android:label="Driving Simulator" android:theme="@style/Theme.DrivingSimulator" android:usesCleartextTraffic="true"><activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|keyboardHidden|screenSize"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>' > native/android/app/src/main/AndroidManifest.xml
-        run: |
-          python3 -c "import pathlib; pathlib.Path('native/android/app/src/main/java/com/turrini/drivingsim').mkdir(parents=True, exist_ok=True); pathlib.Path('native/android/app/src/main/assets').mkdir(parents=True, exist_ok=True); pathlib.Path('native/android/app/src/main/res/values').mkdir(parents=True, exist_ok=True); pathlib.Path('native/android/gradle/wrapper').mkdir(parents=True, exist_ok=True)"
-          echo 'buildscript { repositories { google(); mavenCentral() } dependencies { classpath "com.android.tools.build:gradle:8.2.0" } } allprojects { repositories { google(); mavenCentral() } }' > native/android/build.gradle
-          echo 'pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } } dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS) repositories { google(); mavenCentral() } } rootProject.name = "DrivingSimulator" include ":app"' > native/android/settings.gradle
-          echo 'distributionBase=GRADLE_USER_HOME' > native/android/gradle/wrapper/gradle-wrapper.properties
-          echo 'distributionPath=wrapper/dists' >> native/android/gradle/wrapper/gradle-wrapper.properties
-          echo 'distributionUrl=https://services.gradle.org/distributions/gradle-8.5-bin.zip' >> native/android/gradle/wrapper/gradle-wrapper.properties
-          echo 'zipStoreBase=GRADLE_USER_HOME' >> native/android/gradle/wrapper/gradle-wrapper.properties
-          echo 'zipStorePath=wrapper/dists' >> native/android/gradle/wrapper/gradle-wrapper.properties
-          echo 'plugins { id "com.android.application" } android { namespace "com.turrini.drivingsim" compileSdk 34 defaultConfig { applicationId "com.turrini.drivingsim" minSdk 24 targetSdk 34 versionCode 1 versionName "1.0.0" } buildTypes { release { minifyEnabled false } } compileOptions { sourceCompatibility JavaVersion.VERSION_17 targetCompatibility JavaVersion.VERSION_17 } } dependencies { implementation "androidx.appcompat:appcompat:1.6.1" implementation "com.google.android.material:material:1.11.0" implementation "androidx.webkit:webkit:1.9.0" }' > native/android/app/build.gradle
-          echo '<resources><style name="Theme.DrivingSimulator" parent="Theme.AppCompat.Light.NoActionBar"><item name="android:windowFullscreen">true</item><item name="android:windowNoTitle">true</item></style></resources>' > native/android/app/src/main/res/values/themes.xml
-          echo '<?xml version="1.0" encoding="utf-8"?><manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><application android:allowBackup="true" android:label="Driving Simulator" android:theme="@style/Theme.DrivingSimulator" android:usesCleartextTraffic="true"><activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|keyboardHidden|screenSize"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>' > native/android/app/src/main/AndroidManifest.xml
       - name: Create MainActivity
         run: |
           cat > native/android/app/src/main/java/com/turrini/drivingsim/MainActivity.java << 'ENDJAVA'
