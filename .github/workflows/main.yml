@@ -37,6 +37,7 @@ jobs:
       - name: Run ESLint
         run: |
           npx eslint js/**/*.js --ext .js || true
+          npx eslint src/js/**/*.js --ext .js || true
         continue-on-error: true
 
       - name: Check file sizes
@@ -59,24 +60,39 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
-      - name: Create build directory
-        run: mkdir -p ${{ env.BUILD_DIR }}
-
-      - name: Copy game files
+      - name: Create build directory and copy files
         run: |
-          cp -r index.html css js ${{ env.BUILD_DIR }}/
+          mkdir -p ${{ env.BUILD_DIR }}
+          ls -la
+          ls -la src/ || true
+          
+          if [ -f "src/index.html" ]; then
+            echo "Copying from src/"
+            cp src/index.html ${{ env.BUILD_DIR }}/
+            cp -r src/css ${{ env.BUILD_DIR }}/ 2>/dev/null || true
+            cp -r src/js ${{ env.BUILD_DIR }}/ 2>/dev/null || true
+            # إلا عندك css و js برا src
+            [ -d "css" ] && cp -r css ${{ env.BUILD_DIR }}/ || true
+            [ -d "js" ] && cp -r js ${{ env.BUILD_DIR }}/ || true
+          elif [ -f "index.html" ]; then
+            echo "Copying from root"
+            cp -r index.html css js ${{ env.BUILD_DIR }}/
+          else
+            echo "index.html not found!"
+            find . -name "index.html"
+            exit 1
+          fi
+          
+          ls -la ${{ env.BUILD_DIR }}/
           
       - name: Download Babylon.js dependencies
         run: |
           cd ${{ env.BUILD_DIR }}
           mkdir -p libs
           
-          # Download Babylon.js core
           curl -L "https://cdn.babylonjs.com/babylon.js" -o libs/babylon.js
           curl -L "https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" -o libs/babylonjs.loaders.min.js
           curl -L "https://cdn.babylonjs.com/gui/babylon.gui.min.js" -o libs/babylon.gui.min.js
-          
-          # Download Havok Physics
           curl -L "https://cdn.babylonjs.com/havok/HavokPhysics.bundled.js" -o libs/HavokPhysics.bundled.js || true
 
       - name: Update index.html for local libs
@@ -232,21 +248,18 @@ jobs:
           mkdir -p release
           cd artifacts
           
-          # Package web version
           if [ -d "web-build" ]; then
             cd web-build
             zip -r ../../release/driving-simulator-web-${{ github.ref_name }}.zip .
             cd ..
           fi
           
-          # Package WASM
           if [ -d "wasm-physics" ]; then
             cd wasm-physics
             zip -r ../../release/physics-bridge-wasm-${{ github.ref_name }}.zip .
             cd ..
           fi
           
-          # Package Android (if exists)
           if [ -d "android-apk" ]; then
             cd android-apk
             zip -r ../../release/driving-simulator-android-${{ github.ref_name }}.zip .
