@@ -94,11 +94,109 @@ jobs:
         run: |
           mkdir -p native/android/app/src/main/java/com/turrini/drivingsim
           mkdir -p native/android/app/src/main/assets
-          echo "buildscript { repositories { google(); mavenCentral() } dependencies { classpath 'com.android.tools.build:gradle:8.2.0' } } allprojects { repositories { google(); mavenCentral() } }" > native/android/build.gradle
-          echo "pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } } dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } } rootProject.name = \"DrivingSimulator\"; include ':app'" > native/android/settings.gradle
-          echo "plugins { id 'com.android.application' } android { namespace 'com.turrini.drivingsim'; compileSdk 34; defaultConfig { applicationId \"com.turrini.drivingsim\"; minSdk 24; targetSdk 34; versionCode 1; versionName \"1.0.0\" }; buildTypes { release { minifyEnabled false } }; compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 } } dependencies { implementation 'androidx.appcompat:appcompat:1.6.1'; implementation 'androidx.webkit:webkit:1.9.0' }" > native/android/app/build.gradle
-          echo '<?xml version="1.0" encoding="utf-8"?><manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET" /><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /><application android:allowBackup="true" android:label="Driving Simulator" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:usesCleartextTraffic="true"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity></application></manifest>' > native/android/app/src/main/AndroidManifest.xml
-          echo "package com.turrini.drivingsim; import android.os.Bundle; import android.webkit.WebView; import android.webkit.WebViewClient; import androidx.appcompat.app.AppCompatActivity; public class MainActivity extends AppCompatActivity { private WebView webView; @Override protected void onCreate(Bundle savedInstanceState) { super.onCreate(savedInstanceState); webView = new WebView(this); webView.getSettings().setJavaScriptEnabled(true); webView.getSettings().setDomStorageEnabled(true); webView.setWebViewClient(new WebViewClient()); webView.loadUrl(\"file:///android_asset/index.html\"); setContentView(webView); } }" > native/android/app/src/main/java/com/turrini/drivingsim/MainActivity.java
+          
+          cat > native/android/build.gradle <<'EOF'
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.2.0'
+              }
+          }
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          EOF
+
+          cat > native/android/settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "DrivingSimulator"
+          include ':app'
+          EOF
+
+          cat > native/android/app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.turrini.drivingsim'
+              compileSdk 34
+              defaultConfig {
+                  applicationId "com.turrini.drivingsim"
+                  minSdk 24
+                  targetSdk 34
+                  versionCode 1
+                  versionName "1.0.0"
+              }
+              buildTypes {
+                  release {
+                      minifyEnabled false
+                  }
+              }
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          dependencies {
+              implementation 'androidx.appcompat:appcompat:1.6.1'
+              implementation 'androidx.webkit:webkit:1.9.0'
+          }
+          EOF
+
+          cat > native/android/app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET" />
+              <application android:allowBackup="true" android:label="Driving Simulator" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:usesCleartextTraffic="true">
+                  <activity android:name=".MainActivity" android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > native/android/app/src/main/java/com/turrini/drivingsim/MainActivity.java <<'EOF'
+          package com.turrini.drivingsim;
+          import android.os.Bundle;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import androidx.appcompat.app.AppCompatActivity;
+          public class MainActivity extends AppCompatActivity {
+              private WebView webView;
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+                  webView = new WebView(this);
+                  webView.getSettings().setJavaScriptEnabled(true);
+                  webView.getSettings().setDomStorageEnabled(true);
+                  webView.setWebViewClient(new WebViewClient());
+                  webView.loadUrl("file:///android_asset/index.html");
+                  setContentView(webView);
+              }
+          }
+          EOF
       - name: Copy web assets
         run: |
           mkdir -p native/android/app/src/main/assets
