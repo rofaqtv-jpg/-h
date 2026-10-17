@@ -127,12 +127,14 @@ jobs:
           mkdir -p native/android/app/src/main/assets
           
           # === FIX WRAPPER - الطريقة الصحيحة ===
-          echo "📥 Downloading Gradle 8.5..."
+                    echo "📥 Downloading Gradle 8.5..."
           rm -rf /tmp/dl
           mkdir -p /tmp/dl
           wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/dl/gradle.zip
           unzip -q /tmp/dl/gradle.zip -d /tmp/dl/
-          cp /tmp/dl/gradle-8.5/lib/gradle-wrapper-8.5.jar native/android/gradle/wrapper/gradle-wrapper.jar
+          WRAPPER_JAR=$(find /tmp/dl -name "gradle-wrapper-*.jar" | head -1)
+          echo "Found wrapper at: $WRAPPER_JAR"
+          cp "$WRAPPER_JAR" native/android/gradle/wrapper/gradle-wrapper.jar
           echo "✅ Wrapper JAR extracted"
           
           echo "distributionBase=GRADLE_USER_HOME" > native/android/gradle/wrapper/gradle-wrapper.properties
