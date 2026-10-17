@@ -256,9 +256,9 @@ jobs:
             webView.goBack();
           } else {
             super.onBackPressed();
-        } 
-      } 
-    EOF
+         } 
+         } 
+         EOF
           
       - name: Copy ALL web assets to APK
         run: |
