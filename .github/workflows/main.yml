@@ -169,24 +169,60 @@ jobs:
           rm -f native/android/app/src/main/assets/*.zip || true
           ls -la native/android/app/src/main/assets/ | head -20
       - name: Cache Gradle packages
-        uses: actions/cache@v4
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    needs: build-web
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Java
+        uses: actions/setup-java@v4
         with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-gradle-
+          distribution: 'temurin'
+          java-version: '17'
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+      - name: Download web build
+        uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: web-build
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.5
+      - name: Check & Fix Android project structure
+        run: |
+          mkdir -p native/android/app/src/main/java/com/turrini/drivingsim
+          mkdir -p native/android/app/src/main/assets
+          
+          if [ ! -f "native/android/build.gradle" ]; then
+            echo "buildscript { repositories { google(); mavenCentral() } dependencies { classpath 'com.android.tools.build:gradle:8.2.0' } } allprojects { repositories { google(); mavenCentral() } }" > native/android/build.gradle
+          fi
+          if [ ! -f "native/android/settings.gradle" ]; then
+            echo "pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } } dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } } rootProject.name = \"DrivingSimulator\"; include ':app'" > native/android/settings.gradle
+          fi
+          if [ ! -f "native/android/app/build.gradle" ]; then
+            echo "plugins { id 'com.android.application' } android { namespace 'com.turrini.drivingsim'; compileSdk 34; defaultConfig { applicationId \"com.turrini.drivingsim\"; minSdk 24; targetSdk 34; versionCode 1; versionName \"1.0.0\" }; buildTypes { release { minifyEnabled false } }; compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 } } dependencies { implementation 'androidx.appcompat:appcompat:1.6.1'; implementation 'androidx.webkit:webkit:1.9.0' }" > native/android/app/build.gradle
+          fi
+          if [ ! -f "native/android/app/src/main/AndroidManifest.xml" ]; then
+            echo '<?xml version="1.0" encoding="utf-8"?><manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET" /><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /><application android:allowBackup="true" android:label="Driving Simulator" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:usesCleartextTraffic="true"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity></application></manifest>' > native/android/app/src/main/AndroidManifest.xml
+          fi
+          if [ ! -f "native/android/app/src/main/java/com/turrini/drivingsim/MainActivity.java" ]; then
+            echo "package com.turrini.drivingsim; import android.os.Bundle; import android.webkit.WebView; import android.webkit.WebViewClient; import androidx.appcompat.app.AppCompatActivity; public class MainActivity extends AppCompatActivity { private WebView webView; @Override protected void onCreate(Bundle savedInstanceState) { super.onCreate(savedInstanceState); webView = new WebView(this); webView.getSettings().setJavaScriptEnabled(true); webView.getSettings().setDomStorageEnabled(true); webView.setWebViewClient(new WebViewClient()); webView.loadUrl(\"file:///android_asset/index.html\"); setContentView(webView); } }" > native/android/app/src/main/java/com/turrini/drivingsim/MainActivity.java
+          fi
+      - name: Copy web assets to Android
+        run: |
+          mkdir -p native/android/app/src/main/assets
+          if [ -d "web-build/dist" ]; then cp -r web-build/dist/* native/android/app/src/main/assets/; else cp -r web-build/* native/android/app/src/main/assets/ || true; fi
+          rm -f native/android/app/src/main/assets/*.zip || true
       - name: Build Debug APK
         run: |
           cd native/android
-          ./gradlew assembleDebug --no-daemon --stacktrace
+          gradle assembleDebug --no-daemon --stacktrace
         env:
           GRADLE_OPTS: "-Dorg.gradle.daemon=false"
-      - name: Verify APK files
-        run: |
-          find native/android -name "*.apk" -type f
-          ls -lh native/android/app/build/outputs/apk/debug/
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
         with:
