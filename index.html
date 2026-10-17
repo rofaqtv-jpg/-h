@@ -1,21 +1,24 @@
 <!DOCTYPE html>
-<html lang="ar" dir="rtl">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Driving Simulator</title>
     <link rel="stylesheet" href="css/styles.css">
     <style>
-        /* FIX ANDROID WEBVIEW */
-        * { touch-action: manipulation !important; -webkit-tap-highlight-color: transparent; }
-        #ui-overlay { pointer-events: auto !important; z-index: 10000 !important; position: absolute; top:0; left:0; width:100%; height:100%; }
-        .menu-screen { pointer-events: auto !important; }
-        .menu-btn { pointer-events: auto !important; cursor: pointer; position: relative; z-index: 10001; }
-        #gameCanvas { position: absolute; top:0; left:0; width:100%; height:100%; z-index: 1; pointer-events: none; }
-        .active #gameCanvas { pointer-events: none; }
-        #game-hud.active #gameCanvas { pointer-events: auto; }
+        * { touch-action: manipulation !important; -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
+        body { margin:0; padding:0; overflow:hidden; background:#000; }
+        #gameCanvas { position:fixed; top:0; left:0; width:100%; height:100%; z-index:1; }
+        #ui-overlay { position:fixed; top:0; left:0; width:100%; height:100%; z-index:10000; display:block !important; }
+        .menu-screen { display:none !important; position:absolute; top:0; left:0; width:100%; height:100%; flex-direction:column; justify-content:center; align-items:center; background:rgba(0,0,0,0.9); pointer-events:auto !important; }
+        .menu-screen.active { display:flex !important; }
+        .game-title { color:#fff; font-size:2.5em; margin-bottom:30px; text-align:center; }
+        .menu-buttons { display:flex; flex-direction:column; gap:15px; width:80%; max-width:300px; }
+        .menu-btn { pointer-events:auto !important; z-index:10001; padding:15px 20px; font-size:18px; font-weight:bold; background:#ffcc00; color:#000; border:none; border-radius:8px; cursor:pointer; width:100%; }
+        .menu-btn:active { background:#ffaa00; transform:scale(0.95); }
+        .btn-back { background:#555 !important; color:#fff !important; }
+        #loading-screen { color:#fff; }
     </style>
-    <!-- LOCAL LIBS - ضروري للأندرويد -->
     <script src="libs/babylon.js"></script>
     <script src="libs/babylonjs.loaders.min.js"></script>
     <script src="libs/babylon.gui.min.js"></script>
@@ -34,56 +37,122 @@
             </div>
         </div>
         <div id="multiplayer-menu" class="menu-screen">
-            <h2>MULTIPLAYER</h2>
+            <h2 style="color:#fff">MULTIPLAYER</h2>
             <div class="menu-buttons">
                 <button class="menu-btn" id="btn-create-host">CREATE HOST</button>
                 <button class="menu-btn" id="btn-join-room">JOIN ROOM</button>
                 <button class="menu-btn btn-back" id="btn-back-main">BACK</button>
             </div>
         </div>
-        <div id="host-screen" class="menu-screen"><h2>CREATE ROOM</h2><div class="menu-buttons"><button class="menu-btn" id="btn-start-game">START GAME</button><button class="menu-btn btn-back" id="btn-back-multi">BACK</button></div></div>
-        <div id="join-screen" class="menu-screen"><h2>JOIN ROOM</h2><div class="menu-buttons"><button class="menu-btn btn-back" id="btn-back-join">BACK</button></div></div>
-        <div id="mod-manager-screen" class="menu-screen"><h2>MOD MANAGER</h2><div class="menu-buttons"><button class="menu-btn btn-back" id="btn-back-mods">BACK</button></div></div>
-        <div id="game-hud" class="hidden"><div id="top-hud"><span id="speed-display">0 km/h</span></div></div>
-        <div id="loading-screen" class="menu-screen"><p id="loading-text">Loading...</p></div>
+        <div id="host-screen" class="menu-screen">
+            <h2 style="color:#fff">CREATE ROOM</h2>
+            <div class="menu-buttons">
+                <button class="menu-btn" id="btn-start-game">START GAME</button>
+                <button class="menu-btn btn-back" id="btn-back-multi">BACK</button>
+            </div>
+        </div>
+        <div id="join-screen" class="menu-screen">
+            <h2 style="color:#fff">JOIN ROOM</h2>
+            <div class="menu-buttons">
+                <button class="menu-btn btn-back" id="btn-back-join">BACK</button>
+            </div>
+        </div>
+        <div id="mod-manager-screen" class="menu-screen">
+            <h2 style="color:#fff">MOD MANAGER</h2>
+            <div class="menu-buttons">
+                <button class="menu-btn btn-back" id="btn-back-mods">BACK</button>
+            </div>
+        </div>
+        <div id="loading-screen" class="menu-screen">
+            <h2 style="color:#fff">LOADING...</h2>
+            <p id="loading-text" style="color:#fff">Starting game...</p>
+        </div>
     </div>
 
     <input type="file" id="file-input" accept=".glb,.gltf" style="display:none" multiple>
-    
-    <!-- FIX CLICK FOR ANDROID -->
+
     <script>
+    // ANDROID FIX - BRUTE FORCE
     (function(){
-        function enableButtons(){
-            document.querySelectorAll('.menu-btn').forEach(function(btn){
-                btn.addEventListener('touchend', function(e){
-                    e.preventDefault();
-                    console.log('TOUCH: ' + this.id);
-                    this.click();
-                }, {passive:false});
-                btn.addEventListener('click', function(){
-                    console.log('CLICK: ' + this.id);
-                });
+        function showScreen(id){
+            document.querySelectorAll('.menu-screen').forEach(function(s){ s.classList.remove('active'); });
+            var el = document.getElementById(id);
+            if(el) el.classList.add('active');
+            console.log('SHOW_SCREEN: '+id);
+        }
+
+        function bindAll(){
+            console.log('BINDING BUTTONS...');
+            var bind = function(id, fn){
+                var el = document.getElementById(id);
+                if(!el){ console.log('NOT FOUND: '+id); return; }
+                var handler = function(e){
+                    if(e){ e.preventDefault(); e.stopPropagation(); }
+                    console.log('FIRED: '+id);
+                    try{ fn(); }catch(err){ console.log('ERROR in '+id+': '+err.message); }
+                    return false;
+                };
+                el.onclick = handler;
+                el.ontouchend = handler;
+                el.addEventListener('click', handler);
+                el.addEventListener('touchend', handler, {passive:false});
+                console.log('BOUND: '+id);
+            };
+
+            bind('btn-free-drive', function(){
+                showScreen('loading-screen');
+                document.getElementById('loading-text').innerText = 'Loading FREE DRIVE...';
+                // Try to start game engine
+                setTimeout(function(){
+                    try{
+                        if(window.GameEngine && window.GameEngine.start) window.GameEngine.start();
+                        else if(window.startFreeDrive) window.startFreeDrive();
+                        else if(window.initGame) window.initGame();
+                        else {
+                            console.log('No game start function, showing canvas');
+                            showScreen('loading-screen');
+                            document.getElementById('loading-text').innerText = 'Game loaded! (Engine missing)';
+                            document.getElementById('gameCanvas').style.pointerEvents = 'auto';
+                            document.getElementById('gameCanvas').style.zIndex = '5';
+                        }
+                    }catch(e){ console.log('Start error: '+e.message); }
+                }, 500);
             });
-            // Force menu visible
-            var main = document.getElementById('main-menu');
-            if(main) main.classList.add('active');
+            bind('btn-multiplayer', function(){ showScreen('multiplayer-menu'); });
+            bind('btn-mod-manager', function(){ showScreen('mod-manager-screen'); });
+            bind('btn-settings', function(){ alert('Settings coming soon'); });
+            bind('btn-back-main', function(){ showScreen('main-menu'); });
+            bind('btn-back-multi', function(){ showScreen('multiplayer-menu'); });
+            bind('btn-back-join', function(){ showScreen('multiplayer-menu'); });
+            bind('btn-back-mods', function(){ showScreen('main-menu'); });
+            bind('btn-create-host', function(){ showScreen('host-screen'); });
+            bind('btn-join-room', function(){ showScreen('join-screen'); });
+            bind('btn-start-game', function(){ 
+                showScreen('loading-screen');
+                document.getElementById('loading-text').innerText = 'Starting Host...';
+            });
         }
+
+        window.showScreen = showScreen;
         if(document.readyState === 'loading'){
-            document.addEventListener('DOMContentLoaded', enableButtons);
+            document.addEventListener('DOMContentLoaded', bindAll);
         } else {
-            enableButtons();
+            bindAll();
         }
-        setTimeout(enableButtons, 1000);
-        window.onerror = function(m,u,l){ console.log('JS ERROR: '+m+' @'+l); };
+        setTimeout(bindAll, 500);
+        setTimeout(bindAll, 2000);
+
+        window.onerror = function(msg, url, line){
+            console.log('JS_ERROR: '+msg+' at '+url+':'+line);
+        };
+        console.log('ANDROID FIX LOADED');
     })();
     </script>
 
-    <!-- GAME SCRIPTS - مرة واحدة فقط -->
-    <script src="js/utils/ErrorHandler.js"></script>
-    <script src="js/engine/InputManager.js"></script>
-    <script src="js/engine/SceneManager.js"></script>
-    <script src="js/engine/GameEngine.js"></script>
-    <script src="js/ui/UIManager.js"></script>
-    <script src="js/main.js"></script>
+    <!-- Load game scripts AFTER fix - optional, won't break buttons if missing -->
+    <script src="js/engine/InputManager.js" onerror="console.log('Missing InputManager')"></script>
+    <script src="js/engine/SceneManager.js" onerror="console.log('Missing SceneManager')"></script>
+    <script src="js/engine/GameEngine.js" onerror="console.log('Missing GameEngine')"></script>
+    <script src="js/main.js" onerror="console.log('Missing main.js')"></script>
 </body>
 </html>
