@@ -10,65 +10,76 @@ class GameEngine {
   async init(){
     try{
       console.log('Init Babylon...');
-      if(!window.BABYLON){ console.log('BABYLON not loaded!'); return false; }
-      
       this.engine = new BABYLON.Engine(this.canvas, true, { preserveDrawingBuffer: true, stencil: true });
       this.scene = new BABYLON.Scene(this.engine);
-      this.scene.clearColor = new BABYLON.Color3(0.5, 0.7, 1);
+      this.scene.clearColor = new BABYLON.Color4(0.53, 0.81, 0.98, 1); // سماء زرقاء
 
-      // Camera
-      var camera = new BABYLON.FreeCamera('cam', new BABYLON.Vector3(0,5,-10), this.scene);
-      camera.setTarget(BABYLON.Vector3.Zero());
+      // Camera - بعيدة شوية باش تبان الطوموبيل
+      var camera = new BABYLON.FreeCamera('cam', new BABYLON.Vector3(0,3,-8), this.scene);
+      camera.setTarget(new BABYLON.Vector3(0,1,0));
       camera.attachControl(this.canvas, true);
 
-      // Light
-      var light = new BABYLON.HemisphericLight('light', new BABYLON.Vector3(0,1,0), this.scene);
-      light.intensity = 0.9;
+      // 2 Lights باش ما يبقاش كحل
+      var light1 = new BABYLON.HemisphericLight('hLight', new BABYLON.Vector3(0,1,0), this.scene);
+      light1.intensity = 1.2;
+      var light2 = new BABYLON.DirectionalLight('dLight', new BABYLON.Vector3(-1,-2,-1), this.scene);
+      light2.intensity = 0.8;
 
-      // Ground
-      var ground = BABYLON.MeshBuilder.CreateGround('ground', {width:100, height:100}, this.scene);
-      var mat = new BABYLON.StandardMaterial('mat', this.scene);
-      mat.diffuseColor = new BABYLON.Color3(0.2,0.6,0.2);
-      ground.material = mat;
+      // Ground أخضر
+      var ground = BABYLON.MeshBuilder.CreateGround('ground', {width:200, height:200}, this.scene);
+      var groundMat = new BABYLON.StandardMaterial('gMat', this.scene);
+      groundMat.diffuseColor = new BABYLON.Color3(0.3,0.6,0.3);
+      ground.material = groundMat;
 
-      // Simple car box
+      // Car - لون أصفر باش يبان
       var car = BABYLON.MeshBuilder.CreateBox('car', {width:2, height:1, depth:4}, this.scene);
-      car.position.y = 1;
-      car.position.z = 5;
+      car.position.y = 0.8;
+      car.position.z = 0;
+      var carMat = new BABYLON.StandardMaterial('cMat', this.scene);
+      carMat.diffuseColor = new BABYLON.Color3(1,0.8,0);
+      carMat.emissiveColor = new BABYLON.Color3(0.2,0.1,0); // باش يضوي شوية
+      car.material = carMat;
 
-      this.engine.runRenderLoop(() => {
-        this.scene.render();
+      // Box يدور باش تعرف أن المحرك خدام
+      this.scene.registerBeforeRender(()=>{
+        car.rotation.y += 0.01;
       });
 
+      this.engine.runRenderLoop(() => this.scene.render());
       window.addEventListener('resize', () => this.engine.resize());
 
       console.log('GameEngine INIT OK');
+      // خبي canvas فاللول
+      this.canvas.style.display = 'none';
       return true;
     }catch(e){
-      console.log('GameEngine ERROR: '+e.message+' '+e.stack);
+      console.log('GameEngine ERROR: '+e.message);
       return false;
     }
   }
 
   start(){
-    console.log('GameEngine START');
-    if(this.canvas){
-      this.canvas.style.pointerEvents = 'auto';
-      this.canvas.style.zIndex = '5';
-    }
-    // Hide all menus
+    console.log('GameEngine START - Show 3D');
+    this.canvas.style.display = 'block';
+    this.canvas.style.pointerEvents = 'auto';
+    this.canvas.style.zIndex = '5';
     document.querySelectorAll('.menu-screen').forEach(s=>s.classList.remove('active'));
     document.getElementById('ui-overlay').style.display = 'none';
     if(this.engine) this.engine.resize();
+  }
+
+  stop(){
+    console.log('GameEngine STOP - Hide 3D');
+    this.canvas.style.display = 'none';
+    document.getElementById('ui-overlay').style.display = 'block';
+    document.getElementById('main-menu').classList.add('active');
   }
 }
 
 window.GameEngine = GameEngine;
 window.gameEngineInstance = new GameEngine();
 window.gameEngineInstance.init().then(ok=>{
-  console.log('Engine ready: '+ok);
   window.gameEngine = window.gameEngineInstance;
   window.startFreeDrive = function(){ window.gameEngineInstance.start(); };
+  console.log('Engine ready');
 });
-
-console.log('GameEngine loaded');
