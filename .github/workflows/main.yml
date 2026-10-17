@@ -147,7 +147,8 @@ jobs:
           java-version: '17'
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3 # تم التعديل إلى v3 لضمان الاستقرار
+        uses: android-actions/setup-android@v4
+
 
       - name: Download web build
         uses: actions/download-artifact@v4
