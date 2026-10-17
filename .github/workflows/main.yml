@@ -105,12 +105,6 @@ jobs:
                   classpath 'com.android.tools.build:gradle:8.2.0'
               }
           }
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
           EOF
 
           cat > native/android/settings.gradle <<'EOF'
@@ -122,7 +116,7 @@ jobs:
               }
           }
           dependencyResolutionManagement {
-              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositoriesMode.set(RepositoriesMode.PREFER_SETTINGS)
               repositories {
                   google()
                   mavenCentral()
