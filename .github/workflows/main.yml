@@ -41,7 +41,7 @@ jobs:
           echo "=== ROOT FILES ==="
           ls -la
           
-          # انسخ كل شيء مهم للعبة
+          # نسخ الملفات الأساسية
           cp index.html ${{ env.BUILD_DIR }}/ 2>/dev/null || echo "no index.html in root"
           
           for dir in css js scripts src assets images img models textures sounds audio libs vendor; do
@@ -51,17 +51,32 @@ jobs:
             fi
           done
           
-          # انسخ كل ملفات html, js, css, json, wasm, glb, gltf, png, jpg, mp3, ogg
+          # نسخ أي ملفات ويب أساسية من الجذر
           find . -maxdepth 2 -type f \( -name "*.html" -o -name "*.js" -o -name "*.css" -o -name "*.json" \) ! -path "./node_modules/*" ! -path "./native/*" ! -path "./dist/*" ! -path "./.git/*" -exec cp {} ${{ env.BUILD_DIR }}/ \; 2>/dev/null || true
+          
+          # خطة بديلة: تحميل Babylon.js إذا لم يكن موجوداً في المستودع
+          if [ ! -f "${{ env.BUILD_DIR }}/libs/babylon.js" ] && [ ! -f "${{ env.BUILD_DIR }}/babylon.js" ]; then
+            echo "📥 Babylon.js not found, downloading CDN version..."
+            mkdir -p ${{ env.BUILD_DIR }}/libs
+            curl -sL "https://cdn.babylonjs.com/babylon.js" -o ${{ env.BUILD_DIR }}/libs/babylon.js
+            curl -sL "https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" -o ${{ env.BUILD_DIR }}/libs/babylonjs.loaders.min.js
+            curl -sL "https://cdn.babylonjs.com/gui/babylon.gui.min.js" -o ${{ env.BUILD_DIR }}/libs/babylon.gui.min.js
+            curl -sL "https://cdn.babylonjs.com/havok/HavokPhysics.bundled.js" -o ${{ env.BUILD_DIR }}/libs/HavokPhysics.bundled.js
+            
+            # تحديث الروابط في index.html إذا كان موجوداً
+            if [ -f "${{ env.BUILD_DIR }}/index.html" ]; then
+              sed -i 's|https://cdn.babylonjs.com/babylon.js|libs/babylon.js|g' ${{ env.BUILD_DIR }}/index.html || true
+            fi
+          fi
           
           echo "=== BUILD DIR ==="
           ls -la ${{ env.BUILD_DIR }}/
-          find ${{ env.BUILD_DIR }} -type f | head -50
 
       - name: Create ZIP
         run: |
           cd ${{ env.BUILD_DIR }}
           zip -r ../driving-simulator-web.zip . || true
+          
       - uses: actions/upload-artifact@v4
         with:
           name: web-build
@@ -98,7 +113,7 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-      - uses: android-actions/setup-android@v4
+      - uses: android-actions/setup-android@v3
       - uses: actions/download-artifact@v4
         with:
           name: web-build
@@ -106,17 +121,20 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.5
+
       - name: Fix Android project - READ ALL FILES
         run: |
           mkdir -p native/android/app/src/main/java/com/turrini/drivingsim
           mkdir -p native/android/app/src/main/assets
           mkdir -p native/android/app/src/main/res/values
+          mkdir -p native/android/gradle/wrapper
           
           cat > native/android/build.gradle <<'EOF'
           buildscript {
               repositories { google(); mavenCentral() }
               dependencies { classpath 'com.android.tools.build:gradle:8.2.0' }
           }
+          allprojects { repositories { google(); mavenCentral() } }
           EOF
 
           cat > native/android/settings.gradle <<'EOF'
@@ -127,6 +145,14 @@ jobs:
           }
           rootProject.name = "DrivingSimulator"
           include ':app'
+          EOF
+
+          cat > native/android/gradle/wrapper/gradle-wrapper.properties <<'EOF'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
           EOF
 
           cat > native/android/app/build.gradle <<'EOF'
@@ -158,6 +184,7 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
               <uses-permission android:name="android.permission.INTERNET" />
+              <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
               <application android:allowBackup="true" android:label="Driving Simulator" android:theme="@style/Theme.DrivingSimulator" android:usesCleartextTraffic="true">
                   <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|keyboardHidden|screenSize">
                       <intent-filter>
@@ -192,10 +219,10 @@ jobs:
                   s.setAllowContentAccess(true);
                   s.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
                   s.setJavaScriptCanOpenWindowsAutomatically(true);
+                  s.setCacheMode(WebSettings.LOAD_DEFAULT);
                   
                   webView.setWebViewClient(new WebViewClient());
                   webView.setWebChromeClient(new WebChromeClient());
-                  
                   webView.loadUrl("file:///android_asset/index.html");
                   setContentView(webView);
               }
@@ -214,17 +241,14 @@ jobs:
           echo "=== web-build structure ==="
           ls -R web-build | head -100
           
-          # الحالة 1: web-build/dist موجود
           if [ -d "web-build/dist" ] && [ "$(ls -A web-build/dist)" ]; then
             echo "Copying from web-build/dist"
             cp -r web-build/dist/* native/android/app/src/main/assets/
-          # الحالة 2: web-build مباشرة فيها الملفات
           else
             echo "Copying from web-build"
             cp -r web-build/* native/android/app/src/main/assets/ 2>/dev/null || true
           fi
           
-          # نسخ إضافي من الجذر باش نتأكد
           for f in index.html; do [ -f "$f" ] && cp "$f" native/android/app/src/main/assets/ || true; done
           for d in css js src assets images img models textures libs; do [ -d "$d" ] && cp -r "$d" native/android/app/src/main/assets/ || true; done
           
@@ -232,17 +256,17 @@ jobs:
           
           echo "=== FINAL ASSETS ==="
           ls -la native/android/app/src/main/assets/
-          find native/android/app/src/main/assets -type f | head -50
           
           if [ ! -f "native/android/app/src/main/assets/index.html" ]; then
-            echo "FATAL: index.html missing!"
+            echo "FATAL: index.html missing in assets!"
             exit 1
           fi
 
       - name: Build APK
         run: |
           cd native/android
-          gradle assembleDebug --no-daemon
+          gradle assembleDebug --no-daemon --stacktrace
+          
       - uses: actions/upload-artifact@v4
         with:
           name: driving-simulator-debug-apk
