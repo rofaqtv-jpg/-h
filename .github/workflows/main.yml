@@ -7,7 +7,7 @@ on:
     branches: [ main ]
   release:
     types: [ published ]
-  workflow_dispatch: # يسمح بتشغيل الـ workflow يدوياً من واجهة GitHub
+  workflow_dispatch:
 
 env:
   NODE_VERSION: '18'
@@ -15,11 +15,9 @@ env:
   ANDROID_DIR: 'native/android'
 
 jobs:
-  # ===== CODE QUALITY =====
   lint:
     name: Code Quality Check
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -36,21 +34,13 @@ jobs:
           npm install --save-dev eslint @babel/eslint-parser
 
       - name: Run ESLint
-        run: |
-          npx eslint js/**/*.js --ext .js || true
+        run: npx eslint js/**/*.js --ext .js || true
         continue-on-error: true
 
-      - name: Check file sizes
-        run: |
-          echo "Checking for large files..."
-          find . -type f -size +10M | grep -v node_modules || echo "No large files found"
-
-  # ===== BUILD WEB VERSION =====
   build-web:
     name: Build Web Version
     runs-on: ubuntu-latest
     needs: lint
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -64,9 +54,8 @@ jobs:
         run: mkdir -p ${{ env.BUILD_DIR }}
 
       - name: Copy game files
-        run: |
-          cp -r index.html css js ${{ env.BUILD_DIR }}/ || echo "Some files missing, continuing..."
-          
+        run: cp -r index.html css js ${{ env.BUILD_DIR }}/ || echo "Some files missing, continuing..."
+
       - name: Download Babylon.js dependencies
         run: |
           cd ${{ env.BUILD_DIR }}
@@ -97,11 +86,9 @@ jobs:
             driving-simulator-web.zip
           retention-days: 30
 
-  # ===== BUILD WASM PHYSICS =====
   build-wasm:
     name: Build WASM Physics Bridge
     runs-on: ubuntu-latest
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -113,9 +100,7 @@ jobs:
         run: |
           mkdir -p wasm-build
           if [ -f "native/wasm/physics_bridge.cpp" ]; then
-            emcc native/wasm/physics_bridge.cpp \
-              -O3 \
-              -s WASM=1 \
+            emcc native/wasm/physics_bridge.cpp -O3 -s WASM=1 \
               -s EXPORTED_FUNCTIONS='["_vec3_add","_vec3_sub","_vec3_scale","_vec3_length","_vec3_normalize","_quat_multiply","_quat_from_axis_angle","_quat_rotate","_calculate_suspension","_calculate_tire_force"]' \
               -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]' \
               -o wasm-build/physics_bridge.js
@@ -130,12 +115,10 @@ jobs:
           path: wasm-build/
           retention-days: 30
 
-  # ===== BUILD ANDROID APK =====
   build-android:
     name: Build Android APK
     runs-on: ubuntu-latest
     needs: build-web
-    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -148,7 +131,6 @@ jobs:
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
-
 
       - name: Download web build
         uses: actions/download-artifact@v4
@@ -167,78 +149,56 @@ jobs:
           mkdir -p native/android/app/src/main/res/values
           mkdir -p native/android/app/src/main/assets
           
-          # Download gradle wrapper if missing
           if [ ! -f "native/android/gradle/wrapper/gradle-wrapper.jar" ]; then
             echo "📥 Downloading gradle-wrapper.jar..."
-            curl -L "https://raw.githubusercontent.com/gradle/gradle/v8.5.0/gradle/wrapper/gradle-wrapper.jar" \
-              -o native/android/gradle/wrapper/gradle-wrapper.jar || echo "Failed to download"
+            curl -L "https://raw.githubusercontent.com/gradle/gradle/v8.5.0/gradle/wrapper/gradle-wrapper.jar" -o native/android/gradle/wrapper/gradle-wrapper.jar || echo "Failed"
           fi
           
-          # Create gradlew if missing
           if [ ! -f "native/android/gradlew" ]; then
             echo "📝 Creating gradlew..."
-            cat > native/android/gradlew << 'GRADLEW_EOF'
-#!/bin/sh
-APP_HOME=$( cd "${0%/*}" > /dev/null && pwd -P ) || exit
-CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
-exec java -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"
-GRADLEW_EOF
+            printf '#!/bin/sh\nAPP_HOME=$( cd "${0%%/*}" > /dev/null && pwd -P ) || exit\nCLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar\nexec java -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"\n' > native/android/gradlew
             chmod +x native/android/gradlew
           fi
           
-          # Create build.gradle if missing
           if [ ! -f "native/android/build.gradle" ]; then
-            cat > native/android/build.gradle << 'BUILD_EOF'
-buildscript { repositories { google(); mavenCentral() } dependencies { classpath 'com.android.tools.build:gradle:8.2.0' } }
-allprojects { repositories { google(); mavenCentral() } }
-BUILD_EOF
+            echo "📝 Creating root build.gradle..."
+            echo "buildscript { repositories { google(); mavenCentral() } dependencies { classpath 'com.android.tools.build:gradle:8.2.0' } }" > native/android/build.gradle
+            echo "allprojects { repositories { google(); mavenCentral() } }" >> native/android/build.gradle
           fi
           
-          # Create settings.gradle if missing
           if [ ! -f "native/android/settings.gradle" ]; then
-            cat > native/android/settings.gradle << 'SETTINGS_EOF'
-pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
-rootProject.name = "DrivingSimulator"
-include ':app'
-SETTINGS_EOF
+            echo "📝 Creating settings.gradle..."
+            echo "pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }" > native/android/settings.gradle
+            echo "dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }" >> native/android/settings.gradle
+            echo "rootProject.name = \"DrivingSimulator\"" >> native/android/settings.gradle
+            echo "include ':app'" >> native/android/settings.gradle
           fi
           
-          # Create app/build.gradle if missing
           if [ ! -f "native/android/app/build.gradle" ]; then
-            cat > native/android/app/build.gradle << 'APP_BUILD_EOF'
-plugins { id 'com.android.application' }
-android {
-    namespace 'com.turrini.drivingsim'
-    compileSdk 34
-    defaultConfig { applicationId "com.turrini.drivingsim"; minSdk 24; targetSdk 34; versionCode 1; versionName "1.0.0" }
-    buildTypes { release { minifyEnabled false } }
-    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
-}
-dependencies { implementation 'androidx.appcompat:appcompat:1.6.1'; implementation 'androidx.webkit:webkit:1.9.0' }
-APP_BUILD_EOF
+            echo "📝 Creating app/build.gradle..."
+            echo "plugins { id 'com.android.application' }" > native/android/app/build.gradle
+            echo "android { namespace 'com.turrini.drivingsim'; compileSdk 34; defaultConfig { applicationId \"com.turrini.drivingsim\"; minSdk 24; targetSdk 34; versionCode 1; versionName \"1.0.0\" }; buildTypes { release { minifyEnabled false } }; compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 } }" >> native/android/app/build.gradle
+            echo "dependencies { implementation 'androidx.appcompat:appcompat:1.6.1'; implementation 'androidx.webkit:webkit:1.9.0' }" >> native/android/app/build.gradle
           fi
 
-          # Create AndroidManifest.xml if missing (إضافة مهمة جداً)
           if [ ! -f "native/android/app/src/main/AndroidManifest.xml" ]; then
-            cat > native/android/app/src/main/AndroidManifest.xml << 'MANIFEST_EOF'
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.turrini.drivingsim">
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <application android:allowBackup="true" android:label="Driving Simulator" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:usesCleartextTraffic="true">
-        <activity android:name=".MainActivity" android:exported="true">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-        </activity>
-    </application>
-</manifest>
-MANIFEST_EOF
+            echo "📝 Creating AndroidManifest.xml..."
+            echo '<?xml version="1.0" encoding="utf-8"?>' > native/android/app/src/main/AndroidManifest.xml
+            echo '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.turrini.drivingsim">' >> native/android/app/src/main/AndroidManifest.xml
+            echo '    <uses-permission android:name="android.permission.INTERNET" />' >> native/android/app/src/main/AndroidManifest.xml
+            echo '    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />' >> native/android/app/src/main/AndroidManifest.xml
+            echo '    <application android:allowBackup="true" android:label="Driving Simulator" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:usesCleartextTraffic="true">' >> native/android/app/src/main/AndroidManifest.xml
+            echo '        <activity android:name=".MainActivity" android:exported="true">' >> native/android/app/src/main/AndroidManifest.xml
+            echo '            <intent-filter>' >> native/android/app/src/main/AndroidManifest.xml
+            echo '                <action android:name="android.intent.action.MAIN" />' >> native/android/app/src/main/AndroidManifest.xml
+            echo '                <category android:name="android.intent.category.LAUNCHER" />' >> native/android/app/src/main/AndroidManifest.xml
+            echo '            </intent-filter>' >> native/android/app/src/main/AndroidManifest.xml
+            echo '        </activity>' >> native/android/app/src/main/AndroidManifest.xml
+            echo '    </application>' >> native/android/app/src/main/AndroidManifest.xml
+            echo '</manifest>' >> native/android/app/src/main/AndroidManifest.xml
           fi
           
-          echo "✅ Android structure verified and fixed if needed."
+          echo "✅ Android structure verified and fixed."
 
       - name: Copy web assets to Android
         run: |
@@ -288,21 +248,17 @@ MANIFEST_EOF
           path: native/android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
         
-  # ===== DEPLOY TO GITHUB PAGES =====
   deploy-pages:
     name: Deploy to GitHub Pages
     runs-on: ubuntu-latest
     needs: build-web
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    
     permissions:
       pages: write
       id-token: write
-    
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    
     steps:
       - name: Download web build
         uses: actions/download-artifact@v4
@@ -314,19 +270,17 @@ MANIFEST_EOF
         uses: actions/configure-pages@v4
 
       - name: Upload to GitHub Pages
-        uses: actions/upload-pages-artifact@v3 # تم التعديل إلى v3
+        uses: actions/upload-pages-artifact@v3
 
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
 
-  # ===== CREATE RELEASE =====
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
     needs: [build-web, build-wasm, build-android]
     if: github.event_name == 'release'
-    
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
