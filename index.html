@@ -1,158 +1,28 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Driving Simulator</title>
-    <link rel="stylesheet" href="css/styles.css">
-    <style>
-        * { touch-action: manipulation !important; -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-        body { margin:0; padding:0; overflow:hidden; background:#000; }
-        #gameCanvas { position:fixed; top:0; left:0; width:100%; height:100%; z-index:1; }
-        #ui-overlay { position:fixed; top:0; left:0; width:100%; height:100%; z-index:10000; display:block !important; }
-        .menu-screen { display:none !important; position:absolute; top:0; left:0; width:100%; height:100%; flex-direction:column; justify-content:center; align-items:center; background:rgba(0,0,0,0.9); pointer-events:auto !important; }
-        .menu-screen.active { display:flex !important; }
-        .game-title { color:#fff; font-size:2.5em; margin-bottom:30px; text-align:center; }
-        .menu-buttons { display:flex; flex-direction:column; gap:15px; width:80%; max-width:300px; }
-        .menu-btn { pointer-events:auto !important; z-index:10001; padding:15px 20px; font-size:18px; font-weight:bold; background:#ffcc00; color:#000; border:none; border-radius:8px; cursor:pointer; width:100%; }
-        .menu-btn:active { background:#ffaa00; transform:scale(0.95); }
-        .btn-back { background:#555 !important; color:#fff !important; }
-        #loading-screen { color:#fff; }
-    </style>
-    <script src="libs/babylon.js"></script>
-    <script src="libs/babylonjs.loaders.min.js"></script>
-    <script src="libs/babylon.gui.min.js"></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><meta name="theme-color" content="#0b1013">
+<title>QIMMAT AL-SUOUD | Off-road</title><link rel="stylesheet" href="css/styles.css">
+<script src="https://cdn.babylonjs.com/babylon.js"></script>
+<script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
-    
-    <div id="ui-overlay">
-        <div id="main-menu" class="menu-screen active">
-            <h1 class="game-title">DRIVING SIMULATOR</h1>
-            <div class="menu-buttons">
-                <button class="menu-btn" id="btn-free-drive">FREE DRIVE</button>
-                <button class="menu-btn" id="btn-multiplayer">MULTIPLAYER</button>
-                <button class="menu-btn" id="btn-mod-manager">MOD MANAGER</button>
-                <button class="menu-btn" id="btn-settings">SETTINGS</button>
-            </div>
-        </div>
-        <div id="multiplayer-menu" class="menu-screen">
-            <h2 style="color:#fff">MULTIPLAYER</h2>
-            <div class="menu-buttons">
-                <button class="menu-btn" id="btn-create-host">CREATE HOST</button>
-                <button class="menu-btn" id="btn-join-room">JOIN ROOM</button>
-                <button class="menu-btn btn-back" id="btn-back-main">BACK</button>
-            </div>
-        </div>
-        <div id="host-screen" class="menu-screen">
-            <h2 style="color:#fff">CREATE ROOM</h2>
-            <div class="menu-buttons">
-                <button class="menu-btn" id="btn-start-game">START GAME</button>
-                <button class="menu-btn btn-back" id="btn-back-multi">BACK</button>
-            </div>
-        </div>
-        <div id="join-screen" class="menu-screen">
-            <h2 style="color:#fff">JOIN ROOM</h2>
-            <div class="menu-buttons">
-                <button class="menu-btn btn-back" id="btn-back-join">BACK</button>
-            </div>
-        </div>
-        <div id="mod-manager-screen" class="menu-screen">
-            <h2 style="color:#fff">MOD MANAGER</h2>
-            <div class="menu-buttons">
-                <button class="menu-btn btn-back" id="btn-back-mods">BACK</button>
-            </div>
-        </div>
-        <div id="loading-screen" class="menu-screen">
-            <h2 style="color:#fff">LOADING...</h2>
-            <p id="loading-text" style="color:#fff">Starting game...</p>
-        </div>
-    </div>
-
-    <input type="file" id="file-input" accept=".glb,.gltf" style="display:none" multiple>
-
-    <script>
-    // ANDROID FIX - BRUTE FORCE
-    (function(){
-        function showScreen(id){
-            document.querySelectorAll('.menu-screen').forEach(function(s){ s.classList.remove('active'); });
-            var el = document.getElementById(id);
-            if(el) el.classList.add('active');
-            console.log('SHOW_SCREEN: '+id);
-        }
-
-        function bindAll(){
-            console.log('BINDING BUTTONS...');
-            var bind = function(id, fn){
-                var el = document.getElementById(id);
-                if(!el){ console.log('NOT FOUND: '+id); return; }
-                var handler = function(e){
-                    if(e){ e.preventDefault(); e.stopPropagation(); }
-                    console.log('FIRED: '+id);
-                    try{ fn(); }catch(err){ console.log('ERROR in '+id+': '+err.message); }
-                    return false;
-                };
-                el.onclick = handler;
-                el.ontouchend = handler;
-                el.addEventListener('click', handler);
-                el.addEventListener('touchend', handler, {passive:false});
-                console.log('BOUND: '+id);
-            };
-
-            bind('btn-free-drive', function(){
-                showScreen('loading-screen');
-                document.getElementById('loading-text').innerText = 'Loading FREE DRIVE...';
-                // Try to start game engine
-                setTimeout(function(){
-                    try{
-                        if(window.GameEngine && window.GameEngine.start) window.GameEngine.start();
-                        else if(window.startFreeDrive) window.startFreeDrive();
-                        else if(window.initGame) window.initGame();
-                        else {
-                            console.log('No game start function, showing canvas');
-                            showScreen('loading-screen');
-                            document.getElementById('loading-text').innerText = 'Game loaded! (Engine missing)';
-                            document.getElementById('gameCanvas').style.pointerEvents = 'auto';
-                            document.getElementById('gameCanvas').style.zIndex = '5';
-                        }
-                    }catch(e){ console.log('Start error: '+e.message); }
-                }, 500);
-            });
-            bind('btn-multiplayer', function(){ showScreen('multiplayer-menu'); });
-            bind('btn-mod-manager', function(){ showScreen('mod-manager-screen'); });
-            bind('btn-settings', function(){ alert('Settings coming soon'); });
-            bind('btn-back-main', function(){ showScreen('main-menu'); });
-            bind('btn-back-multi', function(){ showScreen('multiplayer-menu'); });
-            bind('btn-back-join', function(){ showScreen('multiplayer-menu'); });
-            bind('btn-back-mods', function(){ showScreen('main-menu'); });
-            bind('btn-create-host', function(){ showScreen('host-screen'); });
-            bind('btn-join-room', function(){ showScreen('join-screen'); });
-            bind('btn-start-game', function(){ 
-                showScreen('loading-screen');
-                document.getElementById('loading-text').innerText = 'Starting Host...';
-            });
-        }
-
-        window.showScreen = showScreen;
-        if(document.readyState === 'loading'){
-            document.addEventListener('DOMContentLoaded', bindAll);
-        } else {
-            bindAll();
-        }
-        setTimeout(bindAll, 500);
-        setTimeout(bindAll, 2000);
-
-        window.onerror = function(msg, url, line){
-            console.log('JS_ERROR: '+msg+' at '+url+':'+line);
-        };
-        console.log('ANDROID FIX LOADED');
-    })();
-    </script>
-
-    <!-- Load game scripts AFTER fix - optional, won't break buttons if missing -->
-    <script src="js/engine/InputManager.js" onerror="console.log('Missing InputManager')"></script>
-    <script src="js/engine/SceneManager.js" onerror="console.log('Missing SceneManager')"></script>
-    <script src="js/engine/GameEngine.js" onerror="console.log('Missing GameEngine')"></script>
-    <script src="js/main.js" onerror="console.log('Missing main.js')"></script>
-</body>
-</html>
+<canvas id="gameCanvas" aria-label="3D driving world"></canvas>
+<div id="ui-overlay">
+  <section id="main-menu" class="menu-screen active">
+    <div class="menu-top"><div class="brand-mark">T<span>•</span></div><div><div class="eyebrow">TURRINISTUDIO PRESENTS</div><div class="brand-name">QIMMAT <b>AL-SUOUD</b></div></div><div class="online-pill"><i></i> OFF-ROAD SIM</div></div>
+    <div class="hero-copy"><div class="eyebrow red">THE MOUNTAIN IS YOURS</div><h1>DRIVE BEYOND<br><em>THE LIMITS.</em></h1><p>Conquer narrow trails, steep climbs and unforgiving terrain.</p><div class="hero-actions"><button class="primary-btn" id="btn-free-drive">▶ &nbsp; START YOUR ENGINE</button><button class="secondary-btn" id="btn-multiplayer">◎ &nbsp; LOCAL MULTIPLAYER</button></div></div>
+    <div class="menu-bottom"><span>01 / EXPEDITION</span><span>REAL-TIME 3D ENVIRONMENT</span><span>BUILT FOR THE CLIMB <b>↗</b></span></div>
+  </section>
+  <section id="multiplayer-menu" class="menu-screen compact"><div class="panel"><div class="eyebrow red">PLAY TOGETHER</div><h2>LOCAL MULTIPLAYER</h2><p>Choose a session mode. Network play requires both devices on the same Wi-Fi and a running discovery server.</p><button class="primary-btn" id="btn-create-host">＋ CREATE SESSION</button><button class="secondary-btn" id="btn-join-room">⌕ FIND A SESSION</button><button class="text-btn" id="btn-back-main">← BACK TO GARAGE</button><div id="multi-status" class="status-line">Ready to connect</div></div></section>
+  <section id="host-screen" class="menu-screen compact"><div class="panel"><div class="eyebrow red">SESSION SETUP</div><h2>CREATE SESSION</h2><label class="field-label">SESSION NAME<input id="room-name" value="Mountain Crew" maxlength="24"></label><label class="field-label">MAX PLAYERS<select id="player-count"><option>2</option><option>3</option><option selected>4</option></select></label><button class="primary-btn" id="btn-start-game">START DRIVING</button><button class="text-btn" id="btn-back-multi">← BACK</button></div></section>
+  <section id="join-screen" class="menu-screen compact"><div class="panel"><div class="eyebrow red">JOIN THE CLIMB</div><h2>FIND SESSION</h2><p>Enter the host's local IP address to connect.</p><label class="field-label">HOST ADDRESS<input id="host-address" placeholder="192.168.1.10:8080"></label><button class="primary-btn" id="btn-connect">CONNECT</button><button class="text-btn" id="btn-back-join">← BACK</button><div id="join-status" class="status-line"></div></div></section>
+  <section id="mod-manager-screen" class="menu-screen compact"><div class="panel"><div class="eyebrow red">YOUR GARAGE, YOUR RULES</div><h2>VEHICLE MODS</h2><p>Import a vehicle or map in GLB/GLTF format. Models are loaded into this browser session.</p><button class="primary-btn" id="btn-import-mod">＋ IMPORT GLB / GLTF</button><div id="mod-status" class="status-line">No custom model loaded</div><button class="text-btn" id="btn-back-mods">← BACK TO GARAGE</button></div></section>
+  <section id="settings-screen" class="menu-screen compact"><div class="panel"><div class="eyebrow red">TUNE YOUR EXPERIENCE</div><h2>SETTINGS</h2><label class="field-label">GRAPHICS QUALITY<select id="graphics-quality"><option value="low">Performance</option><option value="medium" selected>Balanced</option><option value="high">High</option></select></label><label class="field-label">CAMERA<select id="camera-mode"><option value="chase" selected>Chase camera</option><option value="cockpit">Cockpit view</option><option value="wide">Wide chase</option></select></label><button class="primary-btn" id="btn-save-settings">APPLY SETTINGS</button><button class="text-btn" id="btn-back-settings">← BACK TO GARAGE</button></div></section>
+  <section id="loading-screen" class="menu-screen compact"><div class="loader-ring"></div><h2>PREPARING YOUR EXPEDITION</h2><p id="loading-text">Building the trail…</p></section>
+  <div id="game-hud" class="game-hud hidden"><div class="hud-top"><div class="hud-logo">Q<span>/</span>S</div><div class="hud-stat"><small>ALTITUDE</small><b id="altitude">1,240 <small>M</small></b></div><div class="hud-stat"><small>SPEED</small><b><span id="speed">0</span> <small>KM/H</small></b></div><button id="btn-pause" class="icon-btn">Ⅱ</button></div><div class="hud-bottom"><div class="steering"><button class="drive-btn" id="btn-left">‹</button><button class="drive-btn" id="btn-right">›</button></div><div class="drive-actions"><button class="drive-btn brake" id="btn-brake">BRAKE</button><button class="drive-btn accelerator" id="btn-gas">▲<small>THROTTLE</small></button></div></div><div class="hud-toast" id="hud-toast">EXPEDITION STARTED</div></div>
+  <div id="pause-panel" class="pause-panel hidden"><div class="panel"><div class="eyebrow red">TAKE A BREATHER</div><h2>PAUSED</h2><button class="primary-btn" id="btn-resume">RESUME DRIVE</button><button class="secondary-btn" id="btn-camera">CHANGE CAMERA</button><button class="text-btn" id="btn-quit">END EXPEDITION</button></div></div>
+</div>
+<input type="file" id="file-input" accept=".glb,.gltf" hidden>
+<script src="js/engine/InputManager.js"></script><script src="js/engine/GameEngine.js"></script><script src="js/main.js"></script>
+</body></html>
