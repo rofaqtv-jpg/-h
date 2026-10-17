@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, 
+          maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>Driving Simulator</title>
+    <link rel="stylesheet" href="css/styles.css">
+    
+    <!-- Babylon.js Core -->
+    <script src="https://cdn.babylonjs.com/babylon.js"></script>
+    <script src="https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js"></script>
+    <script src="https://cdn.babylonjs.com/materialsLibrary/babylonjs.materials.min.js"></script>
+    
+    <!-- Havok Physics -->
+    <script src="https://cdn.babylonjs.com/ammo.js/ammo.js"></script>
+    
+    <!-- GUI -->
+    <script src="https://cdn.babylonjs.com/gui/babylon.gui.min.js"></script>
+</head>
+<body>
+    <!-- Game Canvas -->
+    <canvas id="gameCanvas" touch-action="none"></canvas>
+    
+    <!-- UI Overlay -->
+    <div id="ui-overlay">
+        <!-- Main Menu -->
+        <div id="main-menu" class="menu-screen active">
+            <h1 class="game-title">DRIVING SIMULATOR</h1>
+            <div class="menu-buttons">
+                <button class="menu-btn" id="btn-free-drive">FREE DRIVE</button>
+                <button class="menu-btn" id="btn-multiplayer">MULTIPLAYER</button>
+                <button class="menu-btn" id="btn-mod-manager">MOD MANAGER</button>
+                <button class="menu-btn" id="btn-settings">SETTINGS</button>
+            </div>
+        </div>
+        
+        <!-- Multiplayer Menu -->
+        <div id="multiplayer-menu" class="menu-screen">
+            <h2>MULTIPLAYER</h2>
+            <p class="subtitle">LOCAL WI-FI</p>
+            <div class="menu-buttons">
+                <button class="menu-btn" id="btn-create-host">CREATE HOST</button>
+                <button class="menu-btn" id="btn-join-room">JOIN ROOM</button>
+                <button class="menu-btn btn-back" id="btn-back-main">BACK</button>
+            </div>
+        </div>
+        
+        <!-- Create Host Screen -->
+        <div id="host-screen" class="menu-screen">
+            <h2>CREATE ROOM</h2>
+            <div class="room-info">
+                <input type="text" id="room-name" placeholder="Room Name" value="TURRINI ROOM">
+                <div class="players-list" id="host-players">
+                    <div class="player-slot connected">HOST — Connected</div>
+                    <div class="player-slot empty">PLAYER 2 — Empty</div>
+                    <div class="player-slot empty">PLAYER 3 — Empty</div>
+                    <div class="player-slot empty">PLAYER 4 — Empty</div>
+                </div>
+                <p class="room-id">Room ID: <span id="room-id-display">----</span></p>
+            </div>
+            <div class="menu-buttons">
+                <button class="menu-btn" id="btn-start-game">START GAME</button>
+                <button class="menu-btn btn-back" id="btn-back-multi">BACK</button>
+            </div>
+        </div>
+        
+        <!-- Join Room Screen -->
+        <div id="join-screen" class="menu-screen">
+            <h2>JOIN ROOM</h2>
+            <div class="search-status" id="search-status">SEARCHING FOR LOCAL ROOMS...</div>
+            <div class="rooms-list" id="rooms-list"></div>
+            <div class="menu-buttons">
+                <button class="menu-btn btn-back" id="btn-back-join">BACK</button>
+            </div>
+        </div>
+        
+        <!-- Mod Manager Screen -->
+        <div id="mod-manager-screen" class="menu-screen">
+            <h2>MOD MANAGER</h2>
+            <div class="mod-actions">
+                <button class="menu-btn" id="btn-import-vehicle">IMPORT VEHICLE</button>
+                <button class="menu-btn" id="btn-import-map">IMPORT MAP</button>
+                <button class="menu-btn" id="btn-wheel-setup">WHEEL SETUP</button>
+            </div>
+            <div class="mods-list" id="mods-list"></div>
+            <div class="menu-buttons">
+                <button class="menu-btn btn-back" id="btn-back-mods">BACK</button>
+            </div>
+        </div>
+        
+        <!-- Wheel Setup Screen -->
+        <div id="wheel-setup-screen" class="menu-screen">
+            <h2>WHEEL SETUP</h2>
+            <div class="setup-info" id="setup-info">
+                Select a mod and tap on each wheel position.
+            </div>
+            <div class="wheel-buttons">
+                <button class="wheel-btn" data-wheel="FL">Front Left</button>
+                <button class="wheel-btn" data-wheel="FR">Front Right</button>
+                <button class="wheel-btn" data-wheel="RL">Rear Left</button>
+                <button class="wheel-btn" data-wheel="RR">Rear Right</button>
+            </div>
+            <div class="menu-buttons">
+                <button class="menu-btn" id="btn-save-setup">SAVE SETUP</button>
+                <button class="menu-btn btn-back" id="btn-back-setup">BACK</button>
+            </div>
+        </div>
+        
+        <!-- In-Game HUD -->
+        <div id="game-hud" class="hidden">
+            <!-- Control Buttons (Left Side - Steering) -->
+            <div id="steering-controls" class="control-zone left-zone">
+                <button class="ctrl-btn" id="btn-steer-left">
+                    <span class="ctrl-icon">◀</span>
+                </button>
+                <button class="ctrl-btn" id="btn-steer-right">
+                    <span class="ctrl-icon">▶</span>
+                </button>
+            </div>
+            
+            <!-- Control Buttons (Right Side - Gas/Brake) -->
+            <div id="pedal-controls" class="control-zone right-zone">
+                <button class="ctrl-btn ctrl-gas" id="btn-gas">
+                    <span class="ctrl-icon">▲</span>
+                </button>
+                <button class="ctrl-btn ctrl-brake" id="btn-brake">
+                    <span class="ctrl-icon">▼</span>
+                </button>
+            </div>
+            
+            <!-- Top HUD -->
+            <div id="top-hud">
+                <span id="speed-display">0 km/h</span>
+                <button class="ctrl-btn small-btn" id="btn-camera-toggle">📷</button>
+                <button class="ctrl-btn small-btn" id="btn-pause">⏸</button>
+            </div>
+            
+            <!-- Network Status -->
+            <div id="network-status" class="hidden">
+                <span id="network-players">Players: 1/4</span>
+                <span id="network-ping">Ping: --ms</span>
+            </div>
+        </div>
+        
+        <!-- Loading Screen -->
+        <div id="loading-screen" class="menu-screen">
+            <div class="loader"></div>
+            <p id="loading-text">Loading...</p>
+        </div>
+        
+        <!-- Error Dialog -->
+        <div id="error-dialog" class="dialog hidden">
+            <p id="error-message"></p>
+            <button class="menu-btn" id="btn-error-ok">OK</button>
+        </div>
+    </div>
+    
+    <!-- Hidden file input for mod import -->
+    <input type="file" id="file-input" accept=".glb,.gltf" style="display:none" multiple>
+    
+    <!-- Scripts -->
+    <script src="js/utils/ErrorHandler.js"></script>
+    <script src="js/utils/PerformanceOptimizer.js"></script>
+    <script src="js/utils/ModSettings.js"></script>
+    <script src="js/engine/InputManager.js"></script>
+    <script src="js/engine/SceneManager.js"></script>
+    <script src="js/engine/GameEngine.js"></script>
+    <script src="js/mods/GLBImporter.js"></script>
+    <script src="js/mods/VehicleAdapter.js"></script>
+    <script src="js/mods/MapAdapter.js"></script>
+    <script src="js/mods/PhysicsAdapter.js"></script>
+    <script src="js/mods/CameraAdapter.js"></script>
+    <script src="js/mods/ModManager.js"></script>
+    <script src="js/vehicle/VehicleDetector.js"></script>
+    <script src="js/vehicle/WheelSystem.js"></script>
+    <script src="js/vehicle/VehiclePhysics.js"></script>
+    <script src="js/camera/ExternalCamera.js"></script>
+    <script src="js/camera/CockpitCamera.js"></script>
+    <script src="js/ui/ControlButtons.js"></script>
+    <script src="js/ui/MultiplayerUI.js"></script>
+    <script src="js/ui/UIManager.js"></script>
+    <script src="js/network/NetworkManager.js"></script>
+    <script src="js/network/HostManager.js"></script>
+    <script src="js/network/ClientManager.js"></script>
+    <script src="js/network/SyncManager.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
