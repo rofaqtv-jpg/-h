@@ -12,26 +12,19 @@ on:
 env:
   NODE_VERSION: '18'
   BUILD_DIR: 'dist'
-  ANDROID_DIR: 'native/android'
 
 jobs:
   lint:
     name: Code Quality Check
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-      - name: Install dependencies
-        run: |
-          npm init -y
-          npm install --save-dev eslint @babel/eslint-parser
-      - name: Run ESLint
-        run: npx eslint js/**/*.js --ext .js || true
+      - run: npm init -y && npm install --save-dev eslint @babel/eslint-parser
+      - run: npx eslint js/**/*.js --ext .js || true
         continue-on-error: true
 
   build-web:
@@ -39,197 +32,87 @@ jobs:
     runs-on: ubuntu-latest
     needs: lint
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - name: Create build directory
-        run: mkdir -p ${{ env.BUILD_DIR }}
+      - run: mkdir -p ${{ env.BUILD_DIR }}
       - name: Copy game files
         run: |
           if [ -f "index.html" ]; then cp -r index.html css js ${{ env.BUILD_DIR }}/ 2>/dev/null || cp index.html ${{ env.BUILD_DIR }}/
-          else find . -name "index.html" -exec cp {} ${{ env.BUILD_DIR }}/ \; ; fi
+          fi
           ls -la ${{ env.BUILD_DIR }}/
-      - name: Download Babylon.js dependencies
-        run: |
-          cd ${{ env.BUILD_DIR }}
-          mkdir -p libs
-          curl -L "https://cdn.babylonjs.com/babylon.js" -o libs/babylon.js || true
-          curl -L "https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js" -o libs/babylonjs.loaders.min.js || true
-          curl -L "https://cdn.babylonjs.com/gui/babylon.gui.min.js" -o libs/babylon.gui.min.js || true
-      - name: Update index.html for local libs
-        run: |
-          cd ${{ env.BUILD_DIR }}
-          sed -i 's|https://cdn.babylonjs.com/babylon.js|libs/babylon.js|g' index.html || true
-          sed -i 's|https://cdn.babylonjs.com/loaders/babylonjs.loaders.min.js|libs/babylonjs.loaders.min.js|g' index.html || true
-          sed -i 's|https://cdn.babylonjs.com/gui/babylon.gui.min.js|libs/babylon.gui.min.js|g' index.html || true
-      - name: Create ZIP archive
+      - name: Create ZIP
         run: |
           cd ${{ env.BUILD_DIR }}
           zip -r ../driving-simulator-web.zip . || true
-      - name: Upload web build artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: web-build
           path: |
             ${{ env.BUILD_DIR }}
             driving-simulator-web.zip
-          retention-days: 30
 
   build-wasm:
     name: Build WASM Physics Bridge
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup Emscripten
-        uses: mymindstorm/setup-emsdk@v12
+      - uses: actions/checkout@v4
+      - uses: mymindstorm/setup-emsdk@v12
       - name: Compile C++ to WebAssembly
         run: |
           mkdir -p wasm-build
           if [ -f "native/wasm/physics_bridge.cpp" ]; then
-            emcc native/wasm/physics_bridge.cpp -O3 -s WASM=1 -s EXPORTED_FUNCTIONS='["_vec3_add","_vec3_sub","_vec3_scale","_vec3_length","_vec3_normalize","_quat_multiply","_quat_from_axis_angle","_quat_rotate","_calculate_suspension","_calculate_tire_force"]' -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]' -o wasm-build/physics_bridge.js
+            emcc native/wasm/physics_bridge.cpp -O3 -s WASM=1 -o wasm-build/physics_bridge.js
           else
             echo "// placeholder" > wasm-build/physics_bridge.js
           fi
-      - name: Upload WASM artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: wasm-physics
           path: wasm-build/
-          retention-days: 30
 
   build-android:
     name: Build Android APK
     runs-on: ubuntu-latest
     needs: build-web
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
-      - name: Download web build
-        uses: actions/download-artifact@v4
+      - uses: android-actions/setup-android@v4
+      - uses: actions/download-artifact@v4
         with:
           name: web-build
           path: web-build
-      - name: Check & Fix Android project structure
-        run: |
-          mkdir -p native/android/gradle/wrapper
-          mkdir -p native/android/app/src/main/java/com/turrini/drivingsim
-          mkdir -p native/android/app/src/main/assets
-          
-          # === FIX WRAPPER - الطريقة الصحيحة ===
-                    echo "📥 Downloading Gradle 8.5..."
-          rm -rf /tmp/dl
-          mkdir -p /tmp/dl
-          wget -q https://services.gradle.org/distributions/gradle-8.5-bin.zip -O /tmp/dl/gradle.zip
-          unzip -q /tmp/dl/gradle.zip -d /tmp/dl/
-          WRAPPER_JAR=$(find /tmp/dl -name "gradle-wrapper-*.jar" | head -1)
-          echo "Found wrapper at: $WRAPPER_JAR"
-          cp "$WRAPPER_JAR" native/android/gradle/wrapper/gradle-wrapper.jar
-          echo "✅ Wrapper JAR extracted"
-          
-          echo "distributionBase=GRADLE_USER_HOME" > native/android/gradle/wrapper/gradle-wrapper.properties
-          echo "distributionPath=wrapper/dists" >> native/android/gradle/wrapper/gradle-wrapper.properties
-          echo "distributionUrl=https\://services.gradle.org/distributions/gradle-8.5-bin.zip" >> native/android/gradle/wrapper/gradle-wrapper.properties
-          echo "zipStoreBase=GRADLE_USER_HOME" >> native/android/gradle/wrapper/gradle-wrapper.properties
-          echo "zipStorePath=wrapper/dists" >> native/android/gradle/wrapper/gradle-wrapper.properties
-          
-          printf '#!/bin/sh\nAPP_HOME=$( cd "${0%%/*}" > /dev/null && pwd -P ) || exit\nCLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar\nexec java -classpath "$CLASSPATH" org.gradle.wrapper.GradleWrapperMain "$@"\n' > native/android/gradlew
-          chmod +x native/android/gradlew
-          
-          if [ ! -f "native/android/build.gradle" ]; then
-            echo "buildscript { repositories { google(); mavenCentral() } dependencies { classpath 'com.android.tools.build:gradle:8.2.0' } } allprojects { repositories { google(); mavenCentral() } }" > native/android/build.gradle
-          fi
-          if [ ! -f "native/android/settings.gradle" ]; then
-            echo "pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } } dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } } rootProject.name = \"DrivingSimulator\"; include ':app'" > native/android/settings.gradle
-          fi
-          if [ ! -f "native/android/app/build.gradle" ]; then
-            echo "plugins { id 'com.android.application' } android { namespace 'com.turrini.drivingsim'; compileSdk 34; defaultConfig { applicationId \"com.turrini.drivingsim\"; minSdk 24; targetSdk 34; versionCode 1; versionName \"1.0.0\" }; buildTypes { release { minifyEnabled false } }; compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 } } dependencies { implementation 'androidx.appcompat:appcompat:1.6.1'; implementation 'androidx.webkit:webkit:1.9.0' }" > native/android/app/build.gradle
-          fi
-          if [ ! -f "native/android/app/src/main/AndroidManifest.xml" ]; then
-            echo '<?xml version="1.0" encoding="utf-8"?><manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET" /><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /><application android:allowBackup="true" android:label="Driving Simulator" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:usesCleartextTraffic="true"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity></application></manifest>' > native/android/app/src/main/AndroidManifest.xml
-          fi
-          if [ ! -f "native/android/app/src/main/java/com/turrini/drivingsim/MainActivity.java" ]; then
-            echo "package com.turrini.drivingsim; import android.os.Bundle; import android.webkit.WebView; import android.webkit.WebViewClient; import androidx.appcompat.app.AppCompatActivity; public class MainActivity extends AppCompatActivity { private WebView webView; @Override protected void onCreate(Bundle savedInstanceState) { super.onCreate(savedInstanceState); webView = new WebView(this); webView.getSettings().setJavaScriptEnabled(true); webView.getSettings().setDomStorageEnabled(true); webView.setWebViewClient(new WebViewClient()); webView.loadUrl(\"file:///android_asset/index.html\"); setContentView(webView); } @Override public void onBackPressed() { if (webView.canGoBack()) webView.goBack(); else super.onBackPressed(); } }" > native/android/app/src/main/java/com/turrini/drivingsim/MainActivity.java
-          fi
-          echo "✅ Android project fixed"
-      - name: Copy web assets to Android
-        run: |
-          mkdir -p native/android/app/src/main/assets
-          if [ -d "web-build/dist" ]; then cp -r web-build/dist/* native/android/app/src/main/assets/; else cp -r web-build/* native/android/app/src/main/assets/ || true; fi
-          rm -f native/android/app/src/main/assets/*.zip || true
-          ls -la native/android/app/src/main/assets/ | head -20
-      - name: Cache Gradle packages
-  build-android:
-    name: Build Android APK
-    runs-on: ubuntu-latest
-    needs: build-web
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Setup Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
-      - name: Download web build
-        uses: actions/download-artifact@v4
-        with:
-          name: web-build
-          path: web-build
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
+      - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: 8.5
-      - name: Check & Fix Android project structure
+      - name: Fix Android project
         run: |
           mkdir -p native/android/app/src/main/java/com/turrini/drivingsim
           mkdir -p native/android/app/src/main/assets
-          
-          if [ ! -f "native/android/build.gradle" ]; then
-            echo "buildscript { repositories { google(); mavenCentral() } dependencies { classpath 'com.android.tools.build:gradle:8.2.0' } } allprojects { repositories { google(); mavenCentral() } }" > native/android/build.gradle
-          fi
-          if [ ! -f "native/android/settings.gradle" ]; then
-            echo "pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } } dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } } rootProject.name = \"DrivingSimulator\"; include ':app'" > native/android/settings.gradle
-          fi
-          if [ ! -f "native/android/app/build.gradle" ]; then
-            echo "plugins { id 'com.android.application' } android { namespace 'com.turrini.drivingsim'; compileSdk 34; defaultConfig { applicationId \"com.turrini.drivingsim\"; minSdk 24; targetSdk 34; versionCode 1; versionName \"1.0.0\" }; buildTypes { release { minifyEnabled false } }; compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 } } dependencies { implementation 'androidx.appcompat:appcompat:1.6.1'; implementation 'androidx.webkit:webkit:1.9.0' }" > native/android/app/build.gradle
-          fi
-          if [ ! -f "native/android/app/src/main/AndroidManifest.xml" ]; then
-            echo '<?xml version="1.0" encoding="utf-8"?><manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET" /><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /><application android:allowBackup="true" android:label="Driving Simulator" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:usesCleartextTraffic="true"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity></application></manifest>' > native/android/app/src/main/AndroidManifest.xml
-          fi
-          if [ ! -f "native/android/app/src/main/java/com/turrini/drivingsim/MainActivity.java" ]; then
-            echo "package com.turrini.drivingsim; import android.os.Bundle; import android.webkit.WebView; import android.webkit.WebViewClient; import androidx.appcompat.app.AppCompatActivity; public class MainActivity extends AppCompatActivity { private WebView webView; @Override protected void onCreate(Bundle savedInstanceState) { super.onCreate(savedInstanceState); webView = new WebView(this); webView.getSettings().setJavaScriptEnabled(true); webView.getSettings().setDomStorageEnabled(true); webView.setWebViewClient(new WebViewClient()); webView.loadUrl(\"file:///android_asset/index.html\"); setContentView(webView); } }" > native/android/app/src/main/java/com/turrini/drivingsim/MainActivity.java
-          fi
-      - name: Copy web assets to Android
+          echo "buildscript { repositories { google(); mavenCentral() } dependencies { classpath 'com.android.tools.build:gradle:8.2.0' } } allprojects { repositories { google(); mavenCentral() } }" > native/android/build.gradle
+          echo "pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } } dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } } rootProject.name = \"DrivingSimulator\"; include ':app'" > native/android/settings.gradle
+          echo "plugins { id 'com.android.application' } android { namespace 'com.turrini.drivingsim'; compileSdk 34; defaultConfig { applicationId \"com.turrini.drivingsim\"; minSdk 24; targetSdk 34; versionCode 1; versionName \"1.0.0\" }; buildTypes { release { minifyEnabled false } }; compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 } } dependencies { implementation 'androidx.appcompat:appcompat:1.6.1'; implementation 'androidx.webkit:webkit:1.9.0' }" > native/android/app/build.gradle
+          echo '<?xml version="1.0" encoding="utf-8"?><manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET" /><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /><application android:allowBackup="true" android:label="Driving Simulator" android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:usesCleartextTraffic="true"><activity android:name=".MainActivity" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN" /><category android:name="android.intent.category.LAUNCHER" /></intent-filter></activity></application></manifest>' > native/android/app/src/main/AndroidManifest.xml
+          echo "package com.turrini.drivingsim; import android.os.Bundle; import android.webkit.WebView; import android.webkit.WebViewClient; import androidx.appcompat.app.AppCompatActivity; public class MainActivity extends AppCompatActivity { private WebView webView; @Override protected void onCreate(Bundle savedInstanceState) { super.onCreate(savedInstanceState); webView = new WebView(this); webView.getSettings().setJavaScriptEnabled(true); webView.getSettings().setDomStorageEnabled(true); webView.setWebViewClient(new WebViewClient()); webView.loadUrl(\"file:///android_asset/index.html\"); setContentView(webView); } }" > native/android/app/src/main/java/com/turrini/drivingsim/MainActivity.java
+      - name: Copy web assets
         run: |
           mkdir -p native/android/app/src/main/assets
           if [ -d "web-build/dist" ]; then cp -r web-build/dist/* native/android/app/src/main/assets/; else cp -r web-build/* native/android/app/src/main/assets/ || true; fi
           rm -f native/android/app/src/main/assets/*.zip || true
-      - name: Build Debug APK
+      - name: Build APK
         run: |
           cd native/android
-          gradle assembleDebug --no-daemon --stacktrace
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.daemon=false"
-      - name: Upload Debug APK
-        uses: actions/upload-artifact@v4
+          gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
         with:
           name: driving-simulator-debug-apk
           path: native/android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
-        
+
   deploy-pages:
     name: Deploy to GitHub Pages
     runs-on: ubuntu-latest
@@ -242,41 +125,13 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Download web build
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: web-build
           path: deploy
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-      - name: Upload to GitHub Pages
-        uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@v4
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: deploy/dist
-      - name: Deploy to GitHub Pages
-        id: deployment
+      - id: deployment
         uses: actions/deploy-pages@v4
-
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    needs: [build-web, build-wasm, build-android]
-    if: github.event_name == 'release'
-    steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-      - name: Create release package
-        run: |
-          mkdir -p release
-          cd artifacts
-          if [ -d "web-build" ]; then cd web-build && zip -r ../../release/driving-simulator-web-${{ github.ref_name }}.zip . && cd ..; fi
-          if [ -d "wasm-physics" ]; then cd wasm-physics && zip -r ../../release/physics-bridge-wasm-${{ github.ref_name }}.zip . && cd ..; fi
-          if [ -d "driving-simulator-debug-apk" ]; then cd driving-simulator-debug-apk && zip -r ../../release/driving-simulator-android-${{ github.ref_name }}.zip . && cd ..; fi
-      - name: Upload release assets
-        uses: softprops/action-gh-release@v1
-        with:
-          files: release/*.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
