@@ -1,41 +1,58 @@
-name: Build APK - Final Fix
+name: Native Android APK
 on: [push, workflow_dispatch]
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22 }
+        with: { lfs: true }
+
       - uses: actions/setup-java@v4
-        with: { distribution: 'temurin', java-version: 21 }
+        with:
+          distribution: 'temurin'
+          java-version: 21
+
       - uses: android-actions/setup-android@v4
 
-      - name: Prepare www with all files
+      - name: جمع كاع الملفات وحطهم فـ assets
         run: |
-          rm -f package-lock.json || true
-          mkdir -p www
-          cp -r assets images img data sounds audio levels www/ 2>/dev/null || true
-          cp -r *.html *.js *.json *.css *.png *.jpg *.mp3 www/ 2>/dev/null || true
-          if [ ! -f "www/index.html" ]; then
-            [ -f "index.html" ] && cp index.html www/ || echo "<html><body><h1>My Game</h1></body></html>" > www/index.html
-          fi
-          ls www | head -n 20
+          echo "=== الملفات اللي عندك ==="
+          ls -la
+          echo "=== كنقلب على مجلد المشروع ==="
+          # فين كاين الـ app folder
+          APP_DIR=$(find . -type d -name "app" | head -n 1)
+          echo "App dir: $APP_DIR"
+          mkdir -p $APP_DIR/src/main/assets
+          
+          # جيب كاع الملفات الإضافية وحطهم فـ assets باش يبانو فاللعبة
+          for d in assets images data sounds levels raw; do
+            if [ -d "$d" ] && [ "$d" != "$APP_DIR/src/main/assets" ]; then
+              echo "Copy $d -> $APP_DIR/src/main/assets/"
+              cp -r $d/* $APP_DIR/src/main/assets/ 2>/dev/null || cp -r $d $APP_DIR/src/main/assets/ 2>/dev/null || true
+            fi
+          done
+          
+          # جيب الملفات الكبار اللي برا
+          cp -r *.json *.png *.jpg *.mp3 *.db $APP_DIR/src/main/assets/ 2>/dev/null || true
+          
+          echo "=== اللي غادي يدخل فالـ APK ==="
+          ls -R $APP_DIR/src/main/assets | head -n 100
 
-      - name: Init and Build
+      - name: بناء APK أصلي
         run: |
-          npm init -y || true
-          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest --save --legacy-peer-deps
-          echo '{"appId":"com.game.app","appName":"MyGame","webDir":"www"}' > capacitor.config.json
-          rm -rf android || true
-          npx cap add android
-          npx cap copy android
-          echo "android.useAndroidX=true" >> android/gradle.properties
-          echo "android.enableJetifier=true" >> android/gradle.properties
-          cd android && chmod +x gradlew && ./gradlew clean && ./gradlew assembleDebug
+          # لقا gradlew فين ما كان
+          GRADLEW=$(find . -name "gradlew" | head -n 1)
+          echo "Gradlew found: $GRADLEW"
+          chmod +x $GRADLEW
+          # نظف وبني
+          $(dirname $GRADLEW)/gradlew clean || ./gradlew clean || true
+          $(dirname $GRADLEW)/gradlew assembleDebug --stacktrace
 
-      - name: Upload APK
+      - name: رفع الـ APK
         uses: actions/upload-artifact@v4
         with:
-          name: game-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: native-game-apk
+          path: |
+            **/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/debug/*.apk
