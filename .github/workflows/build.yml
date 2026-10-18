@@ -1,60 +1,4 @@
-name: Universal APK - Include All Files
-on: [push, workflow_dispatch]
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          lfs: true
-
-      - uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - uses: actions/setup-java@v4
-        with: { distribution: 'temurin', java-version: 21 }
-      - uses: android-actions/setup-android@v4
-
-      - name: FIND & COPY ALL GAME FILES
-        run: |
-          echo "=== قبل ==="
-          ls -la
-          echo "=== كنقلب على webDir ==="
-          WEBDIR="www"
-          if [ -f "capacitor.config.json" ]; then
-            WEBDIR=$(cat capacitor.config.json | grep -o '"webDir": *"[^"]*"' | cut -d'"' -f4)
-            echo "webDir found: $WEBDIR"
-          fi
-          if [ -z "$WEBDIR" ]; then WEBDIR="www"; fi
-          mkdir -p $WEBDIR
-          
-          echo "=== كنجبد كاع الملفات للـ $WEBDIR ==="
-          # نسخ كلشي اللي يقدر يكون ديال اللعبة
-          for folder in assets images img data sounds audio videos levels maps json; do
-            if [ -d "$folder" ]; then
-              echo "Copying $folder -> $WEBDIR/$folder"
-              cp -r $folder $WEBDIR/ 2>/dev/null || true
-            fi
-          done
-          
-          # نسخ ملفات مفردة
-          cp -r *.json $WEBDIR/ 2>/dev/null || true
-          cp -r *.png *.jpg *.mp3 *.wav *.mp4 $WEBDIR/ 2>/dev/null || true
-          
-          echo "=== من بعد ==="
-          ls -R $WEBDIR | head -n 200
-          echo "Total size:"
-          du -sh $WEBDIR
-
-      - name: Install & Build
-        run: |
-          if [ -f "package.json" ]; then
-            npm install --legacy-peer-deps || npm install
-            npm run build --if-present || true
-          fi
-
-   name: Build APK
+name: Build APK
 on: [push, workflow_dispatch]
 jobs:
   build:
@@ -76,11 +20,3 @@ jobs:
         with:
           name: my-game-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: game-full-files
-          path: |
-            **/app/build/outputs/apk/debug/*.apk
-            android/app/build/outputs/apk/debug/*.apk
