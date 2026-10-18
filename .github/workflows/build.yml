@@ -5,36 +5,42 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
+
       - uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: 21 }
+
       - uses: android-actions/setup-android@v4
 
-      - name: نسخ كاع الملفات لـ www
+      - name: Prepare Game Files
         run: |
           mkdir -p www
-          # كنجبد كلشي من الروت ونحطو فـ www باش يبان فاللعبة
-          cp -r assets www/ 2>/dev/null || true
-          cp -r images www/ 2>/dev/null || true
-          cp -r img www/ 2>/dev/null || true
-          cp -r data www/ 2>/dev/null || true
-          cp -r sounds www/ 2>/dev/null || true
-          cp -r audio www/ 2>/dev/null || true
-          cp -r levels www/ 2>/dev/null || true
-          cp *.json www/ 2>/dev/null || true
-          cp *.png *.jpg www/ 2>/dev/null || true
-          ls -R www | head -n 100
+          # كنجبد كاع الملفات ديالك
+          for f in assets images img data sounds audio levels *.html *.js *.json *.css *.png *.jpg *.mp3; do
+            cp -r $f www/ 2>/dev/null || true
+          done
+          # إلا عندك index.html فالروت كوبيه
+          cp index.html www/ 2>/dev/null || true
+          ls -la www | head -n 50
 
-      - run: npm install || true
-      - run: npm run build || true
-
-      - run: |
-          npx cap add android || true
+      - name: Init Capacitor and Build
+        run: |
+          npm init -y || true
+          npm install @capacitor/core @capacitor/cli @capacitor/android --save
+          # إلا ما كاينش config كنصايبوه
+          if [ ! -f "capacitor.config.json" ]; then
+            echo '{"appId":"com.game.app","appName":"MyGame","webDir":"www"}' > capacitor.config.json
+          fi
+          npx cap add android
           npx cap copy android
-          cd android && chmod +x gradlew && ./gradlew assembleDebug
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
-          name: my-game-full
+          name: game-apk-full
           path: android/app/build/outputs/apk/debug/app-debug.apk
