@@ -6,51 +6,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with: { node-version: 22 }
       - uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: 21 }
       - uses: android-actions/setup-android@v4
 
       - name: Prepare www with all files
         run: |
+          rm -f package-lock.json || true
           mkdir -p www
-          # جيب كاع الملفات ديالك
-          cp -r assets images img data sounds audio levels  www/ 2>/dev/null || true
+          cp -r assets images img data sounds audio levels www/ 2>/dev/null || true
           cp -r *.html *.js *.json *.css *.png *.jpg *.mp3 www/ 2>/dev/null || true
-          # إلا ما كاينش index.html صايب واحد مؤقت
           if [ ! -f "www/index.html" ]; then
-            if [ -f "index.html" ]; then cp index.html www/
-            else echo "<html><body><h1>My Game</h1><script src='app.js'></script></body></html>" > www/index.html
-            fi
+            [ -f "index.html" ] && cp index.html www/ || echo "<html><body><h1>My Game</h1></body></html>" > www/index.html
           fi
-          ls -la www | head -n 30
+          ls www | head -n 20
 
       - name: Init and Build
         run: |
           npm init -y || true
-          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest --save
-          
+          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest --save --legacy-peer-deps
           echo '{"appId":"com.game.app","appName":"MyGame","webDir":"www"}' > capacitor.config.json
-          
-          # صايب android إلا ما كاينش
           rm -rf android || true
           npx cap add android
-          
-          echo "=== CHECK android folder ==="
-          ls -la android/
-          
-          # دابا عاد نصلحو duplicate
-          if [ -f "android/gradle.properties" ]; then
-            echo "android.useAndroidX=true" >> android/gradle.properties
-            echo "android.enableJetifier=true" >> android/gradle.properties
-          fi
-          
           npx cap copy android
-          
-          cd android
-          chmod +x gradlew
-          ./gradlew clean
-          ./gradlew assembleDebug
+          echo "android.useAndroidX=true" >> android/gradle.properties
+          echo "android.enableJetifier=true" >> android/gradle.properties
+          cd android && chmod +x gradlew && ./gradlew clean && ./gradlew assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
