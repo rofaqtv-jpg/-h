@@ -1,46 +1,60 @@
-name: Build APK - All Files
+name: Build APK - Fix Duplicate
 on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
-
       - uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: 21 }
-
       - uses: android-actions/setup-android@v4
 
-      - name: Prepare Game Files
+      - name: Prepare www
         run: |
           mkdir -p www
-          # كنجبد كاع الملفات ديالك
-          for f in assets images img data sounds audio levels *.html *.js *.json *.css *.png *.jpg *.mp3; do
-            cp -r $f www/ 2>/dev/null || true
-          done
-          # إلا عندك index.html فالروت كوبيه
+          cp -r assets images img data sounds audio levels *.html *.js *.json *.css *.png *.jpg *.mp3 www/ 2>/dev/null || true
           cp index.html www/ 2>/dev/null || true
-          ls -la www | head -n 50
+          ls www | head -n 20
 
-      - name: Init Capacitor and Build
+      - name: Init Capacitor
         run: |
           npm init -y || true
-          npm install @capacitor/core @capacitor/cli @capacitor/android --save
-          # إلا ما كاينش config كنصايبوه
+          npm install @capacitor/core@latest @capacitor/cli@latest @capacitor/android@latest --save
           if [ ! -f "capacitor.config.json" ]; then
             echo '{"appId":"com.game.app","appName":"MyGame","webDir":"www"}' > capacitor.config.json
           fi
-          npx cap add android
-          npx cap copy android
+          npx cap add android || true
+          npx cap copy android || true
+
+      - name: FIX Duplicate Classes Error
+        run: |
+          echo "android.useAndroidX=true" >> android/gradle.properties
+          echo "android.enableJetifier=true" >> android/gradle.properties
+          
+          # نمسح الكاش القديم
+          cd android
+          ./gradlew clean || true
+          cd ..
+
+          # كنصلحو ملف build.gradle باش ما يبقاش duplicate
+          echo "
+          configurations {
+            all {
+              exclude group: 'com.google.android.gms', module: 'play-services-measurement'
+              exclude group: 'com.google.android.gms', module: 'play-services-measurement-sdk'
+            }
+          }" >> android/app/build.gradle
+
+      - name: Build APK
+        run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: game-apk-full
+          name: game-fixed-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
