@@ -1,77 +1,79 @@
-name: Universal APK Builder
-
-on:
-  push:
-    branches: [main, master]
-  workflow_dispatch:
+name: Universal APK - Include All Files
+on: [push, workflow_dispatch]
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
         with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
+          fetch-depth: 0
+          lfs: true
 
-      - name: Setup Java 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '21'
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - uses: actions/setup-java@v4
+        with: { distribution: 'temurin', java-version: 21 }
+      - uses: android-actions/setup-android@v4
 
-      - name: Setup Android SDK
-        uses: android-actions/setup-android@v4
-
-      # 1. Install dependencies if package.json exists
-      - name: Install NPM deps
-        if: hashFiles('**/package.json') != ''
+      - name: FIND & COPY ALL GAME FILES
         run: |
-          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+          echo "=== قبل ==="
+          ls -la
+          echo "=== كنقلب على webDir ==="
+          WEBDIR="www"
+          if [ -f "capacitor.config.json" ]; then
+            WEBDIR=$(cat capacitor.config.json | grep -o '"webDir": *"[^"]*"' | cut -d'"' -f4)
+            echo "webDir found: $WEBDIR"
+          fi
+          if [ -z "$WEBDIR" ]; then WEBDIR="www"; fi
+          mkdir -p $WEBDIR
+          
+          echo "=== كنجبد كاع الملفات للـ $WEBDIR ==="
+          # نسخ كلشي اللي يقدر يكون ديال اللعبة
+          for folder in assets images img data sounds audio videos levels maps json; do
+            if [ -d "$folder" ]; then
+              echo "Copying $folder -> $WEBDIR/$folder"
+              cp -r $folder $WEBDIR/ 2>/dev/null || true
+            fi
+          done
+          
+          # نسخ ملفات مفردة
+          cp -r *.json $WEBDIR/ 2>/dev/null || true
+          cp -r *.png *.jpg *.mp3 *.wav *.mp4 $WEBDIR/ 2>/dev/null || true
+          
+          echo "=== من بعد ==="
+          ls -R $WEBDIR | head -n 200
+          echo "Total size:"
+          du -sh $WEBDIR
 
-      # 2. Build web if build script exists
-      - name: Build Web
-        if: hashFiles('**/package.json') != ''
+      - name: Install & Build
         run: |
-          if npm run | grep -q " build"; then npm run build; fi
+          if [ -f "package.json" ]; then
+            npm install --legacy-peer-deps || npm install
+            npm run build --if-present || true
+          fi
 
-      # 3. CAPACITOR PROJECT
-      - name: Build Capacitor APK
-        if: hashFiles('**/capacitor.config.*') != ''
+      - name: Build APK
         run: |
-          npx cap copy android || npx cap add android
-          npx cap copy android
-          cd android
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          if [ -f "capacitor.config.json" ] || [ -f "capacitor.config.ts" ]; then
+            npx cap add android || true
+            npx cap copy android
+            cd android && chmod +x gradlew && ./gradlew assembleDebug
+          elif [ -f "config.xml" ]; then
+            npm i -g cordova
+            cordova platform add android || true
+            cordova build android --debug
+          else
+            echo "No capacitor/cordova found, trying gradle"
+            chmod +x android/gradlew 2>/dev/null || chmod +x gradlew 2>/dev/null || true
+            ./android/gradlew assembleDebug 2>/dev/null || ./gradlew assembleDebug 2>/dev/null || true
+          fi
 
-      # 4. CORDOVA PROJECT
-      - name: Build Cordova APK
-        if: hashFiles('**/config.xml') != '' && hashFiles('**/capacitor.config.*') == ''
-        run: |
-          npm i -g cordova
-          cordova platform add android --no-fetch || true
-          cordova build android --debug --no-daemon
-
-      # 5. PURE ANDROID (has gradlew)
-      - name: Build Native Android APK
-        if: hashFiles('**/gradlew') != '' && hashFiles('**/capacitor.config.*') == ''
-        run: |
-          chmod +x **/gradlew || chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon || ./android/gradlew assembleDebug --no-daemon
-
-      # 6. Upload APK
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: app-debug-${{ github.run_number }}
+          name: game-full-files
           path: |
             **/app/build/outputs/apk/debug/*.apk
-            **/platforms/android/app/build/outputs/apk/debug/*.apk
-            **/android/app/build/outputs/apk/debug/*.apk
-            **/build/app/outputs/flutter-apk/*.apk
+            android/app/build/outputs/apk/debug/*.apk
