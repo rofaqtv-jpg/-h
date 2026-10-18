@@ -1,58 +1,66 @@
-name: Native Android APK
+name: Native Android APK - No gradlew needed
 on: [push, workflow_dispatch]
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with: { lfs: true }
 
       - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: 21
+        with: { distribution: 'temurin', java-version: 21 }
 
       - uses: android-actions/setup-android@v4
 
-      - name: جمع كاع الملفات وحطهم فـ assets
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.7
+
+      - name: جمع كاع ملفات اللعبة
         run: |
-          echo "=== الملفات اللي عندك ==="
           ls -la
-          echo "=== كنقلب على مجلد المشروع ==="
-          # فين كاين الـ app folder
-          APP_DIR=$(find . -type d -name "app" | head -n 1)
-          echo "App dir: $APP_DIR"
+          echo "=== كنقلب على ملفات اللعبة ==="
+          # فين كاين app
+          if [ -d "app" ]; then
+            APP_DIR="app"
+          else
+            APP_DIR=$(find . -type d -name "app" | head -n 1)
+          fi
+          echo "APP_DIR=$APP_DIR"
           mkdir -p $APP_DIR/src/main/assets
           
-          # جيب كاع الملفات الإضافية وحطهم فـ assets باش يبانو فاللعبة
-          for d in assets images data sounds levels raw; do
-            if [ -d "$d" ] && [ "$d" != "$APP_DIR/src/main/assets" ]; then
-              echo "Copy $d -> $APP_DIR/src/main/assets/"
-              cp -r $d/* $APP_DIR/src/main/assets/ 2>/dev/null || cp -r $d $APP_DIR/src/main/assets/ 2>/dev/null || true
-            fi
+          # جيب كاع الملفات اللي برا ودخلهم لـ assets
+          for item in assets images img data sounds levels raw *.json *.png *.jpg *.mp3 *.db *.txt; do
+            for f in $item; do
+              if [ -e "$f" ] && [ "$f" != "$APP_DIR" ]; then
+                echo "Copy $f -> $APP_DIR/src/main/assets/"
+                cp -r "$f" "$APP_DIR/src/main/assets/" 2>/dev/null || true
+              fi
+            done
           done
           
-          # جيب الملفات الكبار اللي برا
-          cp -r *.json *.png *.jpg *.mp3 *.db $APP_DIR/src/main/assets/ 2>/dev/null || true
-          
-          echo "=== اللي غادي يدخل فالـ APK ==="
           ls -R $APP_DIR/src/main/assets | head -n 100
 
-      - name: بناء APK أصلي
+      - name: بناء APK
         run: |
-          # لقا gradlew فين ما كان
-          GRADLEW=$(find . -name "gradlew" | head -n 1)
-          echo "Gradlew found: $GRADLEW"
-          chmod +x $GRADLEW
-          # نظف وبني
-          $(dirname $GRADLEW)/gradlew clean || ./gradlew clean || true
-          $(dirname $GRADLEW)/gradlew assembleDebug --stacktrace
+          echo "=== كنشوف واش كاين gradlew ==="
+          ls -la | grep gradle
+          if [ -f "./gradlew" ]; then
+            chmod +x ./gradlew
+            ./gradlew clean assembleDebug
+          elif [ -f "app/gradlew" ]; then
+            chmod +x app/gradlew
+            ./app/gradlew clean assembleDebug
+          else
+            echo "⚠️ gradlew ما كاينش، كنبني بـ gradle مباشرة"
+            gradle clean assembleDebug
+          fi
 
       - name: رفع الـ APK
         uses: actions/upload-artifact@v4
         with:
-          name: native-game-apk
+          name: native-apk-all-files
           path: |
-            **/build/outputs/apk/debug/*.apk
             app/build/outputs/apk/debug/*.apk
+            **/build/outputs/apk/debug/*.apk
+            build/outputs/apk/debug/*.apk
