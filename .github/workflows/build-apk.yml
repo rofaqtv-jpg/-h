@@ -1,0 +1,77 @@
+name: Universal APK Builder
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+
+      # 1. Install dependencies if package.json exists
+      - name: Install NPM deps
+        if: hashFiles('**/package.json') != ''
+        run: |
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
+
+      # 2. Build web if build script exists
+      - name: Build Web
+        if: hashFiles('**/package.json') != ''
+        run: |
+          if npm run | grep -q " build"; then npm run build; fi
+
+      # 3. CAPACITOR PROJECT
+      - name: Build Capacitor APK
+        if: hashFiles('**/capacitor.config.*') != ''
+        run: |
+          npx cap copy android || npx cap add android
+          npx cap copy android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+
+      # 4. CORDOVA PROJECT
+      - name: Build Cordova APK
+        if: hashFiles('**/config.xml') != '' && hashFiles('**/capacitor.config.*') == ''
+        run: |
+          npm i -g cordova
+          cordova platform add android --no-fetch || true
+          cordova build android --debug --no-daemon
+
+      # 5. PURE ANDROID (has gradlew)
+      - name: Build Native Android APK
+        if: hashFiles('**/gradlew') != '' && hashFiles('**/capacitor.config.*') == ''
+        run: |
+          chmod +x **/gradlew || chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon || ./android/gradlew assembleDebug --no-daemon
+
+      # 6. Upload APK
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-${{ github.run_number }}
+          path: |
+            **/app/build/outputs/apk/debug/*.apk
+            **/platforms/android/app/build/outputs/apk/debug/*.apk
+            **/android/app/build/outputs/apk/debug/*.apk
+            **/build/app/outputs/flutter-apk/*.apk
