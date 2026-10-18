@@ -1,66 +1,48 @@
-name: Native Android APK - No gradlew needed
+name: Native Android APK
 on: [push, workflow_dispatch]
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with: { distribution: 'temurin', java-version: 21 }
-
       - uses: android-actions/setup-android@v4
+      - uses: gradle/actions/setup-gradle@v3
+        with: { gradle-version: 8.7 }
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: 8.7
-
-      - name: جمع كاع ملفات اللعبة
+      - name: جمع كاع الملفات
         run: |
-          ls -la
-          echo "=== كنقلب على ملفات اللعبة ==="
-          # فين كاين app
-          if [ -d "app" ]; then
-            APP_DIR="app"
-          else
-            APP_DIR=$(find . -type d -name "app" | head -n 1)
-          fi
-          echo "APP_DIR=$APP_DIR"
-          mkdir -p $APP_DIR/src/main/assets
-          
-          # جيب كاع الملفات اللي برا ودخلهم لـ assets
-          for item in assets images img data sounds levels raw *.json *.png *.jpg *.mp3 *.db *.txt; do
-            for f in $item; do
-              if [ -e "$f" ] && [ "$f" != "$APP_DIR" ]; then
-                echo "Copy $f -> $APP_DIR/src/main/assets/"
-                cp -r "$f" "$APP_DIR/src/main/assets/" 2>/dev/null || true
-              fi
-            done
-          done
-          
-          ls -R $APP_DIR/src/main/assets | head -n 100
+          ls -la || true
+          mkdir -p app/src/main/assets || true
+          echo "Copying extra files to assets..."
+          cp -r assets app/src/main/assets/ 2>/dev/null || true
+          cp -r images app/src/main/assets/ 2>/dev/null || true
+          cp -r data app/src/main/assets/ 2>/dev/null || true
+          cp -r sounds app/src/main/assets/ 2>/dev/null || true
+          cp -r levels app/src/main/assets/ 2>/dev/null || true
+          cp *.json app/src/main/assets/ 2>/dev/null || true
+          cp *.png app/src/main/assets/ 2>/dev/null || true
+          cp *.mp3 app/src/main/assets/ 2>/dev/null || true
+          ls -R app/src/main/assets 2>/dev/null | head -n 50 || true
 
       - name: بناء APK
         run: |
-          echo "=== كنشوف واش كاين gradlew ==="
-          ls -la | grep gradle
+          echo "Checking for gradlew..."
+          ls -la || true
           if [ -f "./gradlew" ]; then
-            chmod +x ./gradlew
-            ./gradlew clean assembleDebug
-          elif [ -f "app/gradlew" ]; then
-            chmod +x app/gradlew
-            ./app/gradlew clean assembleDebug
+            echo "Found ./gradlew"
+            chmod +x ./gradlew || true
+            ./gradlew clean assembleDebug || gradle clean assembleDebug
           else
-            echo "⚠️ gradlew ما كاينش، كنبني بـ gradle مباشرة"
+            echo "No gradlew found, using system gradle"
             gradle clean assembleDebug
           fi
 
-      - name: رفع الـ APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: native-apk-all-files
+          name: my-native-apk
           path: |
             app/build/outputs/apk/debug/*.apk
             **/build/outputs/apk/debug/*.apk
-            build/outputs/apk/debug/*.apk
